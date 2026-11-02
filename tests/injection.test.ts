@@ -89,8 +89,9 @@ describe("FAILWALK_SITE with FAILWALK_MODE=500 (criterion 6)", () => {
 
 describe("the 500 mode", () => {
   test("rejects with an error that has status 500 and names the wrapper", async () => {
-    const result = MODES["500"]({ wrapper: "billing", method: "subscriptions.retrieve", siteId: "x@y:1", mode: "500" }) as Promise<never>;
-    const error = (await result.catch((caught: VendorError) => caught)) as VendorError;
+    const decision = MODES["500"].inject({ wrapper: "billing", method: "subscriptions.retrieve", siteId: "x@y:1", mode: "500" });
+    if (!decision.replace) throw new Error("500 must replace the call");
+    const error = (await (decision.value as Promise<never>).catch((caught: VendorError) => caught)) as VendorError;
     expect(error).toBeInstanceOf(Error);
     expect(error.name).toBe("FailwalkInjectedError");
     expect(error.status).toBe(500);
@@ -115,7 +116,7 @@ describe("reading the injection from the environment", () => {
   test("throws on half a pair or an unknown mode", () => {
     expect(() => readInjection({ env: { FAILWALK_SITE: "a@b:1" } })).toThrow(/set together/);
     expect(() => readInjection({ env: { FAILWALK_MODE: "500" } })).toThrow(/set together/);
-    expect(() => readInjection({ env: { FAILWALK_SITE: "a@b:1", FAILWALK_MODE: "timeout" } })).toThrow(/Unknown FAILWALK_MODE "timeout"/);
+    expect(() => readInjection({ env: { FAILWALK_SITE: "a@b:1", FAILWALK_MODE: "explode" } })).toThrow(/Unknown FAILWALK_MODE "explode"/);
   });
 });
 

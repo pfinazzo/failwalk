@@ -66,8 +66,8 @@ describe("the tracer (criteria 4 and 5)", () => {
 
   test("writes one record per test file into the trace folder", () => {
     const files = fs.readdirSync(traced.traceDir).filter((name) => name.endsWith(".json")).sort();
-    expect(files).toHaveLength(3);
-    expect(files.map((name) => name.replace(/-[0-9a-f]{8}\.json$/, ""))).toEqual(["database.test.js", "invoices.test.js", "subscriptions.test.js"]);
+    expect(files).toHaveLength(4);
+    expect(files.map((name) => name.replace(/-[0-9a-f]{8}\.json$/, ""))).toEqual(["database.test.js", "invoices.test.js", "signups.test.js", "subscriptions.test.js"]);
   });
 
   test("records no injection when FAILWALK_SITE is not set", () => {
@@ -78,7 +78,7 @@ describe("the tracer (criteria 4 and 5)", () => {
     const dir = makeTempDir({ prefix: "failwalk-trace-print" });
     const printed = runCli({ args: ["trace", "--inventory", traced.inventory, "--trace-dir", traced.traceDir, "--out", path.join(dir, "t.json")], cwd: dir });
     expect(printed.status).toBe(0);
-    expect(printed.stdout).toContain("8 tests in 3 files reached 6 of 9 call sites. 3 UNREACHED, 4 UNINVENTORIED.");
+    expect(printed.stdout).toContain("9 tests in 4 files reached 7 of 10 call sites. 3 UNREACHED, 4 UNINVENTORIED.");
     expect(printed.stdout).toContain(`${RETRIEVE}   2 tests`);
     expect(printed.stdout).toContain(`    ${SEND_RECEIPT}`);
     expect(printed.stdout).toContain("database.get at __tests__/database.test.js:6");
@@ -104,7 +104,7 @@ describe("the setup file without an injection (criterion 7)", () => {
     expect(plain.results.success).toBe(true);
     expect(traced.results.success).toBe(true);
     expect(outcomes({ results: traced.results })).toEqual(outcomes({ results: plain.results }));
-    expect(traced.results.numPassedTests).toBe(8);
+    expect(traced.results.numPassedTests).toBe(9);
   });
 });
 

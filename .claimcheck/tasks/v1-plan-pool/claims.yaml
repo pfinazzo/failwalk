@@ -1,0 +1,179 @@
+# claimcheck claims file for failwalk v1 step 4: the plan, the bounded pool, and a verdict for every cell.
+# One entry per thing the author asserts about this diff. The diff is against v1-inventory-tracer.
+version: 1
+author: "claude-code/claude-fable-5-1"
+base: "v1-inventory-tracer"
+claims:
+  - id: c1
+    claim: "MODES in src/tracer/modes.ts is a record keyed by the six names timeout, dropped, 500, 429, malformed and partial, each row an object with a `what` sentence and an `inject` function; timeout hands back a promise that never settles, dropped rejects with an Error whose code is ECONNRESET, 500 and 429 reject with the vendor-shaped error carrying that status, malformed resolves with {}, and partial lets the real call run and halves an array result (or gives {} for a non-array)"
+    confidence: 0.92
+    criteria: [1]
+    files: ["src/tracer/modes.ts"]
+    kill_condition: "test: tests/modes.test.ts::partial lets the real call run, then keeps the first half of an array and turns anything else into {}"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: on the sample app, partial at billing.invoices.list@controllers/invoices.js:18 fails the two-invoice test with toEqual and passes the empty-list test"
+
+  - id: c2
+    claim: "MODE_NAMES lists the six mode names in the grid order timeout, dropped, 500, 429, malformed, partial, spelled out as a literal because JavaScript lists number-like keys such as \"500\" first; the set of names in MODE_NAMES equals the set of keys of MODES; and every row's `what` sentence says in words what the injected call does"
+    confidence: 0.93
+    criteria: [1]
+    files: ["src/tracer/modes.ts"]
+    kill_condition: "test: tests/modes.test.ts::has exactly the six rows, in grid order, each with a description"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c3
+    claim: "A CallDecision may now carry a `transform` next to `replace: false`; the function Proxy's apply trap calls the real function and passes its return value through the transform when one is given, so partial reshapes the real result instead of replacing the call, and the existing replace: true path is unchanged"
+    confidence: 0.9
+    criteria: [1]
+    files: ["src/tracer/wrapExports.ts", "src/tracer/handleCall.ts"]
+    kill_condition: "test: tests/run.test.ts::the cancel inside try/catch is FAIL under 500, and the retry loop fires the injection six times"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: the partial cells in the sample grid show fired counts equal to the number of real calls, and the invoice list test receives one invoice instead of two"
+
+  - id: c4
+    claim: "buildPlan is pure and makes exactly one cell per inventory site per mode, in inventory order then MODE_NAMES order; a cell for a site some test reached lists each such test's absolute path, root-relative file and full name, sorted by file then name; a cell for a site no test reached has an empty test list and verdict UNREACHED; a trace test with a null testPath is left out"
+    confidence: 0.92
+    criteria: [2]
+    files: ["src/plan/buildPlan.ts"]
+    kill_condition: "test: tests/plan.test.ts::a site no test reached gets an empty test list and the verdict UNREACHED in every mode"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: failwalk plan on the sample app reports 60 cells, 42 to run, 18 UNREACHED, matching 7 reached sites and 3 unreached sites times 6 modes"
+
+  - id: c5
+    claim: "runPlan, the action of `failwalk plan --root <path>`, loads the inventory from --inventory and the trace from --trace, builds the plan for the modes asked for, writes it to --out, prints the plan summary to stdout; and throws an Error naming both the inventory's root and --root when the two resolve to different folders, before any file is written"
+    confidence: 0.9
+    criteria: [2]
+    files: ["src/cli.ts"]
+    kill_condition: "test: tests/plan.test.ts::refuses an inventory made for another root"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c6
+    claim: "runPool runs at most `concurrency` work items at once, returns results in item order, handles more workers than items and an empty list, and is the only bounded loop in failwalk: a named helper whose workers claim items recursively"
+    confidence: 0.93
+    criteria: [3, 11]
+    files: ["src/run/pool.ts"]
+    kill_condition: "test: tests/pool.test.ts::never has more than the concurrency in flight, and returns results in item order"
+    verified_by:
+      - "cmd: npm test"
+      - "cmd: grep -rnE 'for \\(|while \\(' src --include=*.ts (no matches)"
+
+  - id: c7
+    claim: "cellJestArgs filters one runner invocation to exactly the cell's planned tests: one anchored, regex-escaped --testPathPatterns entry per distinct test file and one anchored --testNamePattern alternation of the escaped full names, plus --runInBand, --json, --outputFile, --forceExit and the --testTimeout failwalk sets; runnerEnv returns a fresh environment with FAILWALK_INVENTORY, FAILWALK_TRACE_DIR and FAILWALK_SETUP set, the pair set for a cell and stripped for the baseline, without touching the base object"
+    confidence: 0.92
+    criteria: [3, 4]
+    files: ["src/run/jestArgs.ts"]
+    kill_condition: "test: tests/report.test.ts::filters to exactly the planned files and names, escaped, with the timeout failwalk sets"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: every cell's jest.json under .failwalk/cells lists only the planned tests as run and the others as pending"
+
+  - id: c8
+    claim: "runCell starts a fresh runner process per cell in its own folder under .failwalk/cells with its own trace dir and results file, never throws for a failing or dying runner, and returns evidence with ran, exitCode, the fired count summed from the cell's trace records, one outcome per planned test (passed, assertion, timeout, error, or missing when the runner reported nothing for it), suite load errors, and the duration; runBaseline runs the whole suite once traced and throws when no trace record was written"
+    confidence: 0.88
+    criteria: [3, 4, 6]
+    files: ["src/run/runCell.ts", "src/run/runJest.ts", "src/run/baseline.ts"]
+    kill_condition: "test: tests/run.test.ts::the floating write at line 51 is CRASH under 500 and dropped, and the injection fired once"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: .failwalk/cells holds one folder per planned cell, each with jest.json and a trace folder"
+
+  - id: c9
+    claim: "`failwalk run` gives every runner invocation --testTimeout, 10000 ms by default and --test-timeout-ms to change it, so a timeout injection on an awaited call with no timeout of its own ends as HANG; on the sample app every awaited vendor call is HANG under timeout and the run finishes in under two minutes"
+    confidence: 0.9
+    criteria: [4, 10]
+    files: ["src/run/jestArgs.ts", "src/cli.ts", "src/run/runCommand.ts"]
+    kill_condition: "test: tests/run.test.ts::the awaited signup call is HANG under timeout and FAIL under malformed"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: node dist/cli.js run --root examples/sample-api --wrappers 'config/**/*.js' took 26 seconds and reports 6 HANG cells, all under timeout"
+
+  - id: c10
+    claim: "verdictFor is a lookup over an ordered rule table with no if/else ladder: no results → CRASH; any planned test with outcome error or missing → CRASH; else any timeout → HANG; else any assertion → FAIL; else PASS; classifyFailure maps a runner failure message to timeout when it contains 'Exceeded timeout of N ms', to assertion when it starts with expect( after the error name or contains 'Expected:', and to error otherwise"
+    confidence: 0.93
+    criteria: [5]
+    files: ["src/verdicts.ts"]
+    kill_condition: "test: tests/verdicts.test.ts::the worst outcome wins: CRASH over HANG over FAIL over PASS"
+    verified_by:
+      - "cmd: npm test"
+      - "cmd: grep -n 'else' src/verdicts.ts (no matches)"
+
+  - id: c11
+    claim: "`failwalk run --root <path> --wrappers <glob>` writes failwalk.json holding the inventory, the trace, the plan, and every cell with its verdict, its planned tests, and its evidence including the runner's exit code (UNREACHED cells with null evidence), and also writes failwalk-inventory.json, failwalk-trace.json and failwalk-plan.json next to it"
+    confidence: 0.92
+    criteria: [6]
+    files: ["src/run/runCommand.ts"]
+    kill_condition: "test: tests/run.test.ts::writes failwalk.json with the inventory, the plan, and every cell's verdict, tests and exit code"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c12
+    claim: "formatGrid prints one block per wrapper and one row per cell naming the verdict, the mode and the site id, with rows ordered CRASH, HANG, FAIL, PASS, UNREACHED inside each block; formatRun puts the headline after the grid as the last line, and the CLI writes it to stdout with progress on stderr"
+    confidence: 0.9
+    criteria: [6, 7]
+    files: ["src/run/report.ts", "src/run/runCommand.ts", "src/cli.ts"]
+    kill_condition: "test: tests/report.test.ts::groups cells by wrapper and lists CRASH and HANG rows first, each naming verdict, mode and site"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: the stdout of the sample run ends with the headline line and each wrapper block starts with its CRASH and HANG rows"
+
+  - id: c13
+    claim: "formatHeadline produces exactly `failwalk: <sites> call sites, <modes> modes, <cells> cells. <covered> covered (<percent>%). <crash> CRASH, <hang> HANG, <fail> FAIL, <unreached> UNREACHED.` where covered counts PASS and FAIL cells only and percent is rounded to a whole number"
+    confidence: 0.95
+    criteria: [7]
+    files: ["src/run/report.ts"]
+    kill_condition: "test: tests/report.test.ts::has the spec's exact shape and counts PASS and FAIL as covered"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: the sample run prints `failwalk: 10 call sites, 6 modes, 60 cells. 33 covered (55%). 3 CRASH, 6 HANG, 26 FAIL, 18 UNREACHED.`"
+
+  - id: c14
+    claim: "`failwalk run` sets the process exit code to 1 when the covered fraction is below --min-coverage (default 0) and to 0 otherwise, including when some cells are CRASH; exitCodeFor is the pure function that decides it"
+    confidence: 0.93
+    criteria: [8]
+    files: ["src/run/report.ts", "src/cli.ts", "src/run/runCommand.ts"]
+    kill_condition: "test: tests/run.test.ts::exits 1 when the covered fraction is below --min-coverage"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c15
+    claim: "The run goes through runPool with the --concurrency option (default 4), so several runner processes are in flight at once and the progress lines on stderr finish out of plan order; --concurrency, --min-coverage and --test-timeout-ms are parsed as numbers and a non-number is an error naming the option, and an unknown --modes name is an error naming it"
+    confidence: 0.88
+    criteria: [3]
+    files: ["src/cli.ts", "src/run/runCommand.ts"]
+    kill_condition: "test: tests/run.test.ts::ran the cells through the pool: several runner processes were in flight at once"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c16
+    claim: "examples/sample-api gained controllers/signups.js, which awaits billing.subscriptions.create with no timeout of its own, a POST /signups route in app.js, and __tests__/signups.test.js which asserts on the vendor's answer, so billing.subscriptions.create@controllers/signups.js:13 is HANG under timeout and FAIL under malformed; the sample suite still passes on its own (9 tests) and the README's step 4 table and headline are pasted from a real run in which PASS, FAIL, CRASH, HANG and UNREACHED all appear"
+    confidence: 0.92
+    criteria: [10]
+    files: ["examples/sample-api/controllers/signups.js", "examples/sample-api/app.js", "examples/sample-api/__tests__/signups.test.js"]
+    kill_condition: "cmd: npm test --prefix examples/sample-api"
+    verified_by:
+      - "cmd: npm test --prefix examples/sample-api (9 passed)"
+      - "obs: ran the README's run command from the repo root and copied its stdout into the Step 4 section"
+
+  - id: c17
+    claim: "`npm test` builds, runs the vitest suite (84 tests covering the mode table, the plan builder with UNREACHED pairs, the verdict lookup for each runtime outcome, the pool bound, the headline format, the exit code and one full run) and the sample app's suite, and exits 0 on Node 24"
+    confidence: 0.9
+    criteria: [9]
+    files: ["src/index.ts"]
+    kill_condition: "cmd: npm test"
+    verified_by:
+      - "cmd: npm test (84 vitest tests and 9 sample tests, exit 0, Node 24.21.0)"
+
+  - id: c18
+    claim: "No file under src, tests or examples, and no line of README.md, names, links or reads a real-world vendor, service or repository; every function failwalk itself defines and calls in the new source under src, the run command's `log` callback included, takes one named-params object, the only positional parameters being where a library fixes the signature: the Proxy apply and construct traps, the stream and process event listeners in runJest.ts, the callbacks handed to Array reduce, map, filter, find, sort, flatMap and Promise, and the partial transform a promise chain calls; every named function has a doc block; the modes, the failure kinds and the verdict rules are lookup tables; and the new source has no class, let or var and does not mutate its inputs"
+    confidence: 0.85
+    criteria: [11]
+    files: ["src/tracer/modes.ts", "src/verdicts.ts", "src/run/report.ts", "src/plan/buildPlan.ts"]
+    kill_condition: "cmd: ! grep -rnE '^\\s*(export )?(class|function|var|let) ' src --include=*.ts && ! grep -rniE 'chargebee|firebase|stripe|algolia|api-v4|tonebase|github\\.com|https?://' src tests examples README.md"
+    verified_by:
+      - "cmd: both greps ran with no matches"
+      - "obs: read every new file; the pool's cursor and results array and runJest's stderr buffer are locals the function owns, and runCell's rmSync/mkdirSync are the documented edge writes"

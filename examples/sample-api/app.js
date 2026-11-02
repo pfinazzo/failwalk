@@ -2,6 +2,7 @@ const express = require("express");
 const { syncSubscription, cancelSubscription, recordView } = require("./controllers/subscriptions");
 const { listInvoices } = require("./controllers/invoices");
 const { sendReceipt } = require("./controllers/receipts");
+const { createSignup } = require("./controllers/signups");
 
 const app = express();
 app.use(express.json());
@@ -26,6 +27,15 @@ app.post("/subscriptions/:id/view", (req, res) => res.json(recordView({ subscrip
 app.get("/customers/:id/invoices", async (req, res) => {
   try {
     return res.json(await listInvoices({ customerId: req.params.id }));
+  } catch (error) {
+    return res.status(502).json({ error: error.message });
+  }
+});
+
+app.post("/signups", async (req, res) => {
+  try {
+    const subscription = await createSignup({ customerId: String(req.body.customerId || ""), planId: String(req.body.planId || "") });
+    return res.status(201).json(subscription);
   } catch (error) {
     return res.status(502).json({ error: error.message });
   }

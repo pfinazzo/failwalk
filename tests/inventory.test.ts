@@ -15,6 +15,7 @@ describe("failwalk inventory on the sample app (criteria 1 to 3)", () => {
       { id: "billing.invoices.list@controllers/invoices.js:18", file: "controllers/invoices.js", line: 18, wrapper: "billing", method: "invoices.list", kind: "read" },
       { id: "database.get@controllers/receipts.js:13", file: "controllers/receipts.js", line: 13, wrapper: "database", method: "get", kind: "read" },
       { id: "mailer.send@controllers/receipts.js:15", file: "controllers/receipts.js", line: 15, wrapper: "mailer", method: "send", kind: "write" },
+      { id: "billing.subscriptions.create@controllers/signups.js:13", file: "controllers/signups.js", line: 13, wrapper: "billing", method: "subscriptions.create", kind: "write" },
       { id: "billing.subscriptions.retrieve@controllers/subscriptions.js:12", file: "controllers/subscriptions.js", line: 12, wrapper: "billing", method: "subscriptions.retrieve", kind: "read" },
       { id: "database.update@controllers/subscriptions.js:14", file: "controllers/subscriptions.js", line: 14, wrapper: "database", method: "update", kind: "write" },
       { id: "billing.subscriptions.cancel@controllers/subscriptions.js:33", file: "controllers/subscriptions.js", line: 33, wrapper: "billing", method: "subscriptions.cancel", kind: "write" },
@@ -43,12 +44,12 @@ describe("failwalk inventory on the sample app (criteria 1 to 3)", () => {
     const { status, stdout, stderr } = runCli({ args: ["inventory", "--root", SAMPLE_API, "--wrappers", "config/**/*.js", "--out", `${dir}/inv.json`], cwd: dir });
     expect(status).toBe(0);
     const records = JSON.parse(stdout) as Record<string, unknown>[];
-    expect(records).toHaveLength(9);
+    expect(records).toHaveLength(10);
     records.forEach((record) => expect(Object.keys(record).sort()).toEqual([...RECORD_KEYS].sort()));
     records.forEach((record) => expect(record.id).toBe(`${record.wrapper}.${record.method}@${record.file}:${record.line}`));
-    expect(stderr).toContain("9 call sites in 3 files");
+    expect(stderr).toContain("10 call sites in 4 files");
     expect(stderr).toMatch(/database\s+5/);
-    expect(stderr).toMatch(/billing\s+3/);
+    expect(stderr).toMatch(/billing\s+4/);
     expect(stderr).toMatch(/mailer\s+1/);
   });
 

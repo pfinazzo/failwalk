@@ -3,8 +3,11 @@ import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_IGNORE, formatInventorySummary, scanInventory } from "./inventory/scan";
+import { buildPlan, formatPlanSummary } from "./plan/buildPlan";
+import { formatRun, runWalk } from "./run/runCommand";
 import { loadInventory } from "./tracer/loadInventory";
-import { formatTraceSummary, mergeTraces } from "./tracer/mergeTraces";
+import { formatTraceSummary, mergeTraces, type TraceSummary } from "./tracer/mergeTraces";
+import { MODE_NAMES, type ModeName } from "./tracer/modes";
 import { inventoryPath, traceDirPath } from "./tracer/paths";
 import { readTraceRecords } from "./tracer/traceFile";
 
@@ -13,6 +16,28 @@ type InventoryOptions = { root: string; wrappers: string; out: string; ignore: s
 
 /** Options of `failwalk trace`, as commander parses them. */
 type TraceOptions = { inventory: string; traceDir?: string; out: string; clear: boolean };
+
+/** Options of `failwalk plan`, as commander parses them. */
+type PlanOptions = { root: string; inventory: string; trace: string; out: string; modes: string[] };
+
+/** Options of `failwalk run`, as commander parses them. */
+type RunCliOptions = {
+  root: string;
+  wrappers: string;
+  ignore: string[];
+  config?: string;
+  outDir: string;
+  concurrency: string;
+  minCoverage: string;
+  testTimeoutMs: string;
+  modes: string[];
+};
+
+/** The default number of runner processes in flight at once. */
+const DEFAULT_CONCURRENCY = 4;
+
+/** The default per-test timeout failwalk gives the runner, in milliseconds. */
+const DEFAULT_TEST_TIMEOUT_MS = 10_000;
 
 /**
  * Runs `failwalk inventory`: scans the project, writes the inventory file, prints the records to stdout and the summary to stderr.
@@ -58,6 +83,78 @@ const runTrace = ({ inventory: inventoryFile, traceDir, out, clear }: TraceOptio
 };
 
 /**
+ * Checks that every requested mode name is in the table. Throws naming the bad one, so a typo cannot silently shrink the grid.
+ *
+ * @param params.modes - mode names from the command line
+ * @returns the names typed as modes, or every mode when none were given
+ */
+const parseModes = ({ modes }: { modes: readonly string[] }): ModeName[] => {
+  const unknown = modes.filter((mode) => !MODE_NAMES.includes(mode as ModeName));
+  if (unknown.length > 0) throw new Error(`Unknown mode "${unknown[0]}". Known modes: ${MODE_NAMES.join(", ")}`);
+  return modes.length === 0 ? [...MODE_NAMES] : (modes as ModeName[]);
+};
+
+/**
+ * Parses a number option. Throws naming the option when the value is not a number.
+ *
+ * @param params.name - the option, for the error
+ * @param params.value - the raw text
+ * @returns the number
+ */
+const parseNumber = ({ name, value }: { name: string; value: string }): number => {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) throw new Error(`${name} must be a number, got "${value}"`);
+  return parsed;
+};
+
+/**
+ * Runs `failwalk plan`: builds one cell per (call site, mode) from the inventory and the merged trace, writes failwalk-plan.json and prints the summary.
+ * Throws when the inventory was made for a different root than --root, which means the files in this folder belong to another project.
+ *
+ * @param params.root - the project folder the inventory must have been made for
+ * @param params.inventory - the inventory file
+ * @param params.trace - the merged trace file
+ * @param params.out - where to write the plan
+ * @param params.modes - mode names to plan, or empty for all
+ */
+const runPlan = ({ root, inventory: inventoryFile, trace: traceFile, out, modes }: PlanOptions): void => {
+  const inventory = loadInventory({ file: path.resolve(inventoryFile) });
+  if (path.resolve(root) !== inventory.root) {
+    throw new Error(`The inventory at ${path.resolve(inventoryFile)} was made for ${inventory.root}, not ${path.resolve(root)}. Run "failwalk inventory" for this root first.`);
+  }
+  if (!fs.existsSync(traceFile)) throw new Error(`No trace at ${path.resolve(traceFile)}. Run "failwalk trace" first.`);
+  const trace = JSON.parse(fs.readFileSync(traceFile, "utf8")) as TraceSummary;
+  const plan = buildPlan({ inventory, trace, modes: parseModes({ modes }) });
+  fs.writeFileSync(out, JSON.stringify(plan, null, 2));
+  process.stdout.write(`${formatPlanSummary({ plan })}\n`);
+  process.stderr.write(`written to ${path.resolve(out)}\n`);
+};
+
+/**
+ * Runs `failwalk run`: the whole walk in one go. Progress goes to stderr; the table and the headline go to stdout, headline last.
+ * Exits 1 when the covered fraction is below --min-coverage.
+ *
+ * @param params - the command's options, see RunCliOptions
+ */
+const runRun = async ({ root, wrappers, ignore, config, outDir, concurrency, minCoverage, testTimeoutMs, modes }: RunCliOptions): Promise<void> => {
+  const { report, exitCode } = await runWalk({
+    root,
+    wrappers,
+    ignore,
+    config,
+    outDir,
+    concurrency: parseNumber({ name: "--concurrency", value: concurrency }),
+    minCoverage: parseNumber({ name: "--min-coverage", value: minCoverage }),
+    testTimeoutMs: parseNumber({ name: "--test-timeout-ms", value: testTimeoutMs }),
+    modes: parseModes({ modes }),
+    log: ({ line }) => process.stderr.write(`${line}\n`),
+  });
+  process.stderr.write(`written to ${path.join(path.resolve(outDir), "failwalk.json")}\n`);
+  process.stdout.write(`${formatRun({ report })}\n`);
+  process.exitCode = exitCode;
+};
+
+/**
  * Runs `failwalk setup-path`: prints where the built Jest setup file is.
  */
 const printSetupPath = (): void => {
@@ -85,6 +182,30 @@ program
   .option("--out <file>", "where to write the merged trace", "failwalk-trace.json")
   .option("--clear", "delete the per-file records instead, before a fresh run", false)
   .action(runTrace);
+
+program
+  .command("plan")
+  .description("Build one cell per (call site, mode) from failwalk-inventory.json and failwalk-trace.json, and write failwalk-plan.json.")
+  .option("--root <path>", "the project folder the inventory was made for", ".")
+  .option("--inventory <file>", "the inventory file", inventoryPath({ env: process.env }))
+  .option("--trace <file>", "the merged trace file", "failwalk-trace.json")
+  .option("--out <file>", "where to write the plan", "failwalk-plan.json")
+  .option("--modes <names...>", "modes to plan instead of all of them", [])
+  .action(runPlan);
+
+program
+  .command("run")
+  .description("Inventory, trace, plan, then run every planned cell with its failure injected, and print the grid.")
+  .option("--root <path>", "project folder to scan and test", ".")
+  .option("--wrappers <glob>", "glob for wrapper modules, relative to root", "config/**/*.js")
+  .option("--ignore <globs...>", "globs to skip in the inventory instead of the defaults", [...DEFAULT_IGNORE])
+  .option("--config <file>", "the config override that loads the setup file, relative to root (default: jest.failwalk.config.js)")
+  .option("--out-dir <dir>", "where the four output files and the .failwalk work folder go", ".")
+  .option("--concurrency <n>", "how many runner processes may run at once", String(DEFAULT_CONCURRENCY))
+  .option("--min-coverage <fraction>", "exit 1 when fewer than this fraction of cells are PASS or FAIL", "0")
+  .option("--test-timeout-ms <ms>", "per-test timeout given to the runner", String(DEFAULT_TEST_TIMEOUT_MS))
+  .option("--modes <names...>", "modes to run instead of all of them", [])
+  .action(runRun);
 
 program
   .command("setup-path")
