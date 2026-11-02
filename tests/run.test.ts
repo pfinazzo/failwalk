@@ -8,6 +8,9 @@ const VIEW_UPDATE = "database.update@controllers/subscriptions.js:51";
 const CANCEL = "billing.subscriptions.cancel@controllers/subscriptions.js:33";
 const LIST_INVOICES = "billing.invoices.list@controllers/invoices.js:18";
 const SIGNUP_CREATE = "billing.subscriptions.create@controllers/signups.js:13";
+const SWALLOWED_REMOVE = "database.remove@controllers/swallowedCatch.js:16";
+const LOGIN_UPDATE = "database.update@controllers/unawaitedCall.js:14";
+const RETRY_CREATE = "billing.subscriptions.create@controllers/retryWithoutKey.js:25";
 const UNREACHED_SITES = ["database.get@controllers/receipts.js:13", "mailer.send@controllers/receipts.js:15", "database.update@controllers/subscriptions.js:37"];
 
 /** One full run of the sample app, shared by the tests below. */
@@ -22,7 +25,7 @@ beforeAll(() => {
   const reportFile = path.join(dir, "failwalk.json");
   if (!fs.existsSync(reportFile)) throw new Error(`run wrote no failwalk.json: ${result.stderr}`);
   walk = { ...result, report: JSON.parse(fs.readFileSync(reportFile, "utf8")) as RunReport, dir };
-});
+}, 120_000); // The walk runs 72 cells, ten of them two-second hangs: longer than the default hook timeout.
 
 /**
  * Finds one cell of the shared run.
@@ -37,7 +40,7 @@ const cellOf = ({ site, mode }: { site: string; mode: string }) => {
   return found;
 };
 
-describe("failwalk run on the sample app (criteria 3 to 8, 10)", () => {
+describe("failwalk run on the sample app (criteria 9 to 11)", () => {
   test("exits 0 with the default floor even though some cells are CRASH", () => {
     expect(walk.status).toBe(0);
     expect(walk.report.counts.CRASH).toBeGreaterThan(0);
@@ -46,15 +49,16 @@ describe("failwalk run on the sample app (criteria 3 to 8, 10)", () => {
   test("prints the headline as the last line, matching the report", () => {
     const lines = walk.stdout.trimEnd().split("\n");
     expect(lines.at(-1)).toBe(walk.report.headline);
-    expect(lines.at(-1)).toMatch(/^failwalk: 10 call sites, 6 modes, 60 cells\. \d+ covered \(\d+%\)\. \d+ CRASH, \d+ HANG, \d+ FAIL, 18 UNREACHED\.$/);
+    expect(lines.at(-1)).toMatch(/^failwalk: 15 call sites, 6 modes, 90 cells\. \d+ covered \(\d+%\)\. \d+ CRASH, \d+ HANG, \d+ FAIL, \d+ RISK, 18 UNREACHED\.$/);
   });
 
   test("writes failwalk.json with the inventory, the plan, and every cell's verdict, tests and exit code", () => {
-    expect(walk.report.inventory.sites).toHaveLength(10);
-    expect(walk.report.plan.cells).toHaveLength(60);
-    expect(walk.report.cells).toHaveLength(60);
+    expect(walk.report.inventory.sites).toHaveLength(15);
+    expect(walk.report.plan.cells).toHaveLength(90);
+    expect(walk.report.cells).toHaveLength(90);
     walk.report.cells.forEach((cell) => {
-      expect(["PASS", "FAIL", "CRASH", "HANG", "UNREACHED"]).toContain(cell.verdict);
+      expect(["PASS", "FAIL", "CRASH", "HANG", "RISK", "UNREACHED"]).toContain(cell.verdict);
+      expect(Array.isArray(cell.checks)).toBe(true);
       if (cell.verdict === "UNREACHED") {
         expect(cell.tests).toEqual([]);
         expect(cell.evidence).toBeNull();
@@ -87,15 +91,36 @@ describe("failwalk run on the sample app (criteria 3 to 8, 10)", () => {
     expect(cellOf({ site: LIST_INVOICES, mode: "partial" })).toMatchObject({ verdict: "FAIL", evidence: { fired: 2 } });
   });
 
+  test("a PASS whose site has a fired check is RISK, records the check names, and is not counted as covered", () => {
+    expect(cellOf({ site: SWALLOWED_REMOVE, mode: "500" })).toMatchObject({ verdict: "RISK", checks: ["swallowed-catch"], evidence: { fired: 1, exitCode: 0 } });
+    expect(cellOf({ site: SWALLOWED_REMOVE, mode: "timeout" })).toMatchObject({ verdict: "HANG", checks: ["swallowed-catch"] });
+    expect(cellOf({ site: LOGIN_UPDATE, mode: "timeout" })).toMatchObject({ verdict: "RISK", checks: ["unawaited-call"] });
+    expect(cellOf({ site: LOGIN_UPDATE, mode: "500" })).toMatchObject({ verdict: "CRASH", checks: ["unawaited-call"] });
+    expect(cellOf({ site: VIEW_UPDATE, mode: "timeout" })).toMatchObject({ verdict: "RISK", checks: ["unawaited-call"] });
+    expect(cellOf({ site: RETRY_CREATE, mode: "malformed" })).toMatchObject({ verdict: "RISK", checks: ["retry-without-idempotency-key"] });
+    expect(cellOf({ site: RETRY_CREATE, mode: "500" })).toMatchObject({ verdict: "FAIL", evidence: { fired: 3 } });
+    expect(cellOf({ site: "database.update@controllers/subscriptions.js:14", mode: "malformed" })).toMatchObject({ verdict: "PASS", checks: [] });
+    const { counts } = walk.report;
+    expect(counts.RISK).toBeGreaterThan(0);
+    expect(walk.report.covered).toBeCloseTo((counts.PASS + counts.FAIL) / 90);
+    expect(walk.report.headline).toContain(`${counts.FAIL} FAIL, ${counts.RISK} RISK, ${counts.UNREACHED} UNREACHED.`);
+  });
+
   test("the receipt path and the catch path are UNREACHED in every mode", () => {
     UNREACHED_SITES.forEach((site) => walk.report.plan.modes.forEach((mode) => expect(cellOf({ site, mode }).verdict).toBe("UNREACHED")));
   });
 
-  test("every verdict except MOCKED and RISK appears in the terminal table, grouped by wrapper with CRASH and HANG first", () => {
-    ["PASS", "FAIL", "CRASH", "HANG", "UNREACHED"].forEach((verdict) => expect(walk.report.counts[verdict as keyof typeof walk.report.counts]).toBeGreaterThan(0));
+  test("every verdict except MOCKED appears in the terminal table, grouped by wrapper with CRASH, HANG and RISK first, RISK rows naming their checks", () => {
+    ["PASS", "FAIL", "CRASH", "HANG", "RISK", "UNREACHED"].forEach((verdict) => expect(walk.report.counts[verdict as keyof typeof walk.report.counts]).toBeGreaterThan(0));
     const lines = walk.stdout.split("\n");
     const databaseStart = lines.findIndex((line) => line.startsWith("database   "));
     expect(lines[databaseStart + 1]).toMatch(/^ {2}CRASH /);
+    const databaseVerdicts = lines.slice(databaseStart + 1).slice(0, 42).map((line) => line.trim().split(/\s+/)[0]);
+    const firstRisk = databaseVerdicts.indexOf("RISK");
+    const firstFail = databaseVerdicts.indexOf("FAIL");
+    expect(databaseVerdicts.lastIndexOf("HANG")).toBeLessThan(firstRisk);
+    expect(databaseVerdicts.lastIndexOf("RISK")).toBeLessThan(firstFail);
+    expect(lines).toContainEqual(expect.stringMatching(/^ {2}RISK {6}500 {7}database\.remove@controllers\/swallowedCatch\.js:16 {3}fired 1; checks: swallowed-catch$/));
     const billingStart = lines.findIndex((line) => line.startsWith("billing   "));
     expect(lines[billingStart + 1]).toMatch(/^ {2}HANG {6}timeout/);
   });
@@ -105,7 +130,7 @@ describe("failwalk run on the sample app (criteria 3 to 8, 10)", () => {
     const order = walk.stderr
       .split("\n")
       .flatMap((line) => (/^\[(\d+)\/\d+\]/.exec(line) ? [Number(RegExp.$1)] : []));
-    expect(order.length).toBe(42);
+    expect(order.length).toBe(72);
     expect(order).not.toEqual([...order].sort((a, b) => a - b));
   });
 
@@ -116,6 +141,6 @@ describe("failwalk run on the sample app (criteria 3 to 8, 10)", () => {
       cwd: dir,
     });
     expect(status).toBe(1);
-    expect(stdout.trimEnd().split("\n").at(-1)).toMatch(/^failwalk: 10 call sites, 1 modes, 10 cells\./);
+    expect(stdout.trimEnd().split("\n").at(-1)).toMatch(/^failwalk: 15 call sites, 1 modes, 15 cells\./);
   });
 });

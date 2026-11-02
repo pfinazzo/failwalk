@@ -1,3 +1,5 @@
+import type { CheckName, Note } from "./staticChecks";
+
 /** Whether a wrapper method only reads from the dependency or can change something. */
 export type CallKind = "read" | "write";
 
@@ -14,6 +16,10 @@ export type CallSite = {
   /** Full member chain after the wrapper, for example `subscriptions.retrieve`. */
   method: string;
   kind: CallKind;
+  /** The static checks that fired on this call, in table order. Empty when none did. */
+  checks: CheckName[];
+  /** Shapes the checks saw but cannot judge. Empty when there are none. */
+  notes: Note[];
 };
 
 /** A source file the parser could not read. Reported, never hidden. */
