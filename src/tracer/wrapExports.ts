@@ -1,5 +1,9 @@
-/** What the tracer decides for one call: let the real method run, or hand back a replacement value. */
-export type CallDecision = { replace: false } | { replace: true; value: unknown };
+/**
+ * What the tracer decides for one call: let the real method run, let it run and reshape its result, or hand back a replacement value.
+ */
+export type CallDecision =
+  | { replace: false; transform?: (result: unknown) => unknown }
+  | { replace: true; value: unknown };
 
 /** Called synchronously inside every wrapped method, so the stack still holds the caller. */
 export type OnCall = (params: { method: string }) => CallDecision;
@@ -62,7 +66,7 @@ const getTrap =
  * @param params.fn - the real function
  * @param params.methodPath - member names from the module root to this function
  * @param params.onCall - the tracer's per-call hook
- * @returns a Proxy that calls the real function unless `onCall` replaces the result
+ * @returns a Proxy that calls the real function unless `onCall` replaces or reshapes the result
  */
 const wrapFunction = ({ fn, methodPath, onCall }: { fn: AnyFunction; methodPath: readonly string[]; onCall: OnCall }): AnyFunction => {
   /**
@@ -71,13 +75,14 @@ const wrapFunction = ({ fn, methodPath, onCall }: { fn: AnyFunction; methodPath:
    * @param target - the real function
    * @param thisArg - the receiver, often one of our proxies
    * @param args - the call's arguments
-   * @returns the replacement value, or whatever the real function returns
+   * @returns the replacement value, the reshaped result, or whatever the real function returns
    */
   const apply = (target: AnyFunction, thisArg: unknown, args: unknown[]): unknown => {
     const decision = onCall({ method: methodPath.join(".") || "default" });
     if (decision.replace) return decision.value;
     const realThis = typeof thisArg === "object" && thisArg !== null ? realTargets.get(thisArg) ?? thisArg : thisArg;
-    return Reflect.apply(target, realThis, args);
+    const result = Reflect.apply(target, realThis, args);
+    return decision.transform ? decision.transform(result) : result;
   };
   /**
    * Proxy `construct` trap, called positionally by the Proxy API: `new Wrapper()` passes through unrecorded.

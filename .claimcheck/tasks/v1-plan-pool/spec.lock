@@ -1,0 +1,52 @@
+{
+  "criteria": [
+    {
+      "id": 1,
+      "sha256": "4344dc90ffebf1cc6139c3b748b67e9a7a8c2efedc0ad6957888060c72bf0b44"
+    },
+    {
+      "id": 2,
+      "sha256": "e5b43ce9bb09ec1b2b39bfd2d65375e23881b934e0c257ce7d559ec2345be902"
+    },
+    {
+      "id": 3,
+      "sha256": "1abeb45ee2cbaed49066522d2af15f8d976e4dbbbd675b69b559b15d88bab0d9"
+    },
+    {
+      "id": 4,
+      "sha256": "bf99b29771d3a48543011e5ba9fbe161a219572d0170c999d7fbee6a43d0bb27"
+    },
+    {
+      "id": 5,
+      "sha256": "4f58471bfc091315ad51a9f31b7b8421c1120a1767e3c301b471cc057f1cabf4"
+    },
+    {
+      "id": 6,
+      "sha256": "1b72a31bedd248969830a32027fc5588e1a925e9bb08b2e7c25ab7f55462688c"
+    },
+    {
+      "id": 7,
+      "sha256": "21cd4ed55cc8696ccabcf7d75025e5b6f1772a5d5cb661185f265e5cb2d056db"
+    },
+    {
+      "id": 8,
+      "sha256": "51c6c9bd9ba68bc4f68b7861832e543958e884eaedb6b4a7b56db855bf20a9f1"
+    },
+    {
+      "id": 9,
+      "sha256": "6c7004da9d986a699f14828b44cede3fa4c7d6daf59fd57029d56a2405294003"
+    },
+    {
+      "id": 10,
+      "sha256": "b0d3148530d4541777e4d5e6b59be07ae62f85a3c26900df8b0c8fa0bacc0078"
+    },
+    {
+      "id": 11,
+      "sha256": "590d77a2cc8a6ef62fcc0921b263f5ebd3bde616d9d803a32c487de1b7b654ed"
+    }
+  ],
+  "frozen_at": "2026-11-02T19:31:51Z",
+  "git_head": "f3bf8b7b3edc35c3da73365964c2b8305951aed4",
+  "spec_sha256": "6d7e82e9c8656b3359c3493bd75aa1f733f789fbf789a4225a4819ad463f7ab5",
+  "version": 1
+}

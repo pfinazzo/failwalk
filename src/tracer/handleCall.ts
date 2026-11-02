@@ -8,7 +8,7 @@ import type { CurrentTest } from "./jestHooks";
 
 /**
  * Handles one wrapper call: finds the call site from the stack, records the reach for the current test,
- * and swaps in the failure mode when the site is the injection target. Writes to the tracer state.
+ * and applies the failure mode when the site is the injection target. Writes to the tracer state.
  * Must run synchronously inside the wrapped method so the stack still holds the caller.
  *
  * @param params.wrapper - wrapper name
@@ -19,7 +19,7 @@ import type { CurrentTest } from "./jestHooks";
  * @param params.index - inventory sites by file and line
  * @param params.injection - the active injection, or null
  * @param params.test - the test running right now
- * @returns proceed, or the replacement value for the injected site
+ * @returns proceed, or the mode's decision for the injected site
  */
 export const handleCall = ({
   wrapper,
@@ -45,5 +45,5 @@ export const handleCall = ({
   recordReach({ testPath: test.testPath, name: test.name, reach });
   if (!injection || injection.site !== reach.id) return { replace: false };
   recordInjectionFired();
-  return { replace: true, value: MODES[injection.mode]({ wrapper, method, siteId: reach.id, mode: injection.mode }) };
+  return MODES[injection.mode].inject({ wrapper, method, siteId: reach.id, mode: injection.mode });
 };

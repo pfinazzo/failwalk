@@ -23,3 +23,5 @@ dist/
 .failwalk/
 failwalk-inventory.json
 failwalk-trace.json
+failwalk-plan.json
+failwalk.json
