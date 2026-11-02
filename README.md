@@ -523,7 +523,7 @@ failwalk inventory: 15 call sites in 9 files, 3 of 3 wrappers used
 written to /Users/patrickfinazzo/Desktop/dependency-failure-coverage/failwalk-inventory.json
 ```
 
-Nine checks fire on seven sites. Five of those sites were added for this step, one per check, each in its own controller named for the pattern. The other two were there already: the retry loop in `listInvoices` has no wait between attempts and its `catch` only stores the error, and the write in `recordView` was never awaited. The mailer wrapper has no time limit at all, so both calls into it fire `no-timeout`. The billing and database wrappers set one limit for every method at module level, so none of their calls do.
+Nine checks fire on eight sites. Five of those sites were added for this step, one per check, each in its own controller named for the pattern. The other three were there already: the retry loop in `listInvoices` has no wait between attempts and its `catch` only stores the error, the write in `recordView` was never awaited, and the receipt route's mailer call has no time limit. The mailer wrapper has none at all, so both calls into it fire `no-timeout`. The billing and database wrappers set one limit for every method at module level, so none of their calls do.
 
 ### The verdict
 
