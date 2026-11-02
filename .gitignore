@@ -16,3 +16,10 @@ id_ed25519*
 .claimcheck/app-state.json
 .claimcheck/spec-draft.json
 .claimcheck/tasks/*/spec-draft.json
+
+# build output and local run output
+node_modules/
+dist/
+.failwalk/
+failwalk-inventory.json
+failwalk-trace.json

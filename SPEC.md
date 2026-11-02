@@ -38,8 +38,10 @@ A senior engineer on a service that calls vendors and databases through a few
 wrapper modules. They want a CI number for "how much of our failure handling is
 tested" and a list of the exact lines to fix.
 
-Primary target for v1: a Node service with Jest or Vitest and a wrapper layer
-like api-v4's `config/` folder. The first user is us, dogfooding on api-v4.
+Primary target for v1: a Node service with Jest or Vitest and a wrapper layer,
+one folder of modules that every vendor call goes through. The first target is
+a sample app inside this repo, `examples/sample-api`, built to exercise every
+verdict in the grid.
 
 ## What already exists, and why this is still worth building
 
@@ -66,7 +68,8 @@ delivery. Nobody ships a language-general grid.
 1. Produce the grid for a Node service in one command with no new tests.
 2. Run in CI and fail the build when coverage drops below a threshold.
 3. Name the exact file and line for every CRASH and RISK cell.
-4. Finish a run on api-v4 in under 15 minutes on a laptop.
+4. Finish a run on a service with a few hundred tests in under 15 minutes on
+   a laptop.
 
 ## Non-goals for v1
 
@@ -105,9 +108,9 @@ Find every call site that reaches a dependency.
 wrapper (`retrieve`, `get`, `list` are reads; `create`, `update`, `charge`,
 `set` are writes). Unknown methods default to `write`, the safer assumption.
 
-Why wrapper modules and not network interception: api-v4 already routes every
-vendor call through `config/`. The inventory is a static scan with no runtime
-cost. Rainmaker had to proxy HTTP because .NET apps call SDKs directly.
+Why wrapper modules and not network interception: many services already route
+every vendor call through one folder of wrapper modules. The inventory is then
+a static scan with no runtime cost. Rainmaker had to proxy HTTP because .NET apps call SDKs directly.
 
 If a codebase has no wrapper layer: v2 adds a network-level inventory. v1
 reports zero call sites and says why.
@@ -246,7 +249,8 @@ In order of value.
 
 ## Numbers that prove it works
 
-Before anyone else sees it, dogfood on api-v4 and record:
+Before anyone else sees it, run it on the sample app, then on one real
+service, and record:
 
 - Call sites found, by wrapper.
 - Covered fraction on the first run.
@@ -271,7 +275,8 @@ wrong somewhere above, and the fix goes here before any more code.
 
 ## Build order
 
-1. Inventory on api-v4. Print the call-site list. Check it by hand.
+1. Inventory on `examples/sample-api`. Print the call-site list. Check it by
+   hand.
 2. Tracer in a Jest setup file. Print which tests reach which sites.
 3. One mode, `500`, one call site, by hand. Confirm a CRASH shows up.
 4. The plan and the bounded pool. All modes, all sites.

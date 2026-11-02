@@ -1,0 +1,138 @@
+# claimcheck claims file for failwalk v1: inventory, tracer, one injected mode.
+# One entry per thing the author asserts about this diff.
+version: 1
+author: "claude-code/claude-fable-5-1"
+base: "main"
+claims:
+  - id: c1
+    claim: "`failwalk inventory --root <path> --wrappers <glob>` prints a JSON array with one record per wrapper call site, each with exactly the keys id, file, line, wrapper, method, kind, where id equals `<wrapper>.<method>@<file>:<line>` and file is relative to --root"
+    confidence: 0.95
+    criteria: [1]
+    files: ["src/cli.ts", "src/inventory/scan.ts", "src/inventory/types.ts", "src/inventory/wrapperName.ts", "src/index.ts", "package.json", "tsconfig.json", "vitest.config.mts"]
+    kill_condition: "test: tests/inventory.test.ts::the CLI prints one JSON record per call site with exactly the six keys, and counts by wrapper"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: ran node dist/cli.js inventory --root examples/sample-api --wrappers 'config/**/*.js' and read all 9 records against the source lines"
+
+  - id: c2
+    claim: "The inventory records a call site whether the wrapper arrived through require, destructured require, require(...).member, or an ES import (default, named, renamed or namespace), and method is the full member chain after the wrapper; a local name that shadows an import is not counted"
+    confidence: 0.9
+    criteria: [2]
+    files: ["src/inventory/findCallSites.ts", "src/inventory/resolveWrapper.ts"]
+    kill_condition: "test: tests/inventory.test.ts::finds calls through named, renamed, namespace and default imports, and ignores a shadowing local"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: the sample app's `database.update` via `const database = require(...)` and `get` via `const { get } = require(...)` both appear with the expected method"
+
+  - id: c3
+    claim: "kind is read when the last segment of method is one of the read verbs (including get, retrieve, list, find, fetch, query, exists) or starts with one followed by a capital letter or underscore; every other method name is write"
+    confidence: 0.95
+    criteria: [3]
+    files: ["src/inventory/kinds.ts"]
+    kill_condition: "test: tests/inventory.test.ts::anything else is a write, including names that only contain or start with a read verb"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c4
+    claim: "Loaded through setupFilesAfterEnv in examples/sample-api/jest.failwalk.config.js, the tracer wraps every function the wrapper modules export (four member levels deep) and, after `failwalk trace`, failwalk-trace.json lists for each test the inventory ids it reached, matched by the caller frame's file and line after Jest's source-map resolution"
+    confidence: 0.85
+    criteria: [4]
+    files: ["src/tracer/setup.ts", "src/tracer/handleCall.ts", "src/tracer/wrapExports.ts", "src/tracer/stack.ts", "src/tracer/siteIndex.ts", "src/tracer/recorder.ts", "src/tracer/traceFile.ts", "src/tracer/jestHooks.ts", "src/tracer/mergeTraces.ts", "src/tracer/loadInventory.ts", "src/tracer/paths.ts", "src/tracer/jestGlobals.d.ts"]
+    kill_condition: "test: tests/tracer.test.ts::writes failwalk-trace.json with the call sites each test reached"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: node dist/cli.js trace on the sample app reports 6 of 9 sites reached with the expected tests under each"
+
+  - id: c5
+    claim: "A wrapper call whose caller frame matches no inventory record is kept in failwalk-trace.json under UNINVENTORIED with wrapper, method, file, line and the tests that made it, and is also attached to each test's record"
+    confidence: 0.9
+    criteria: [5]
+    files: ["src/tracer/siteIndex.ts", "src/tracer/mergeTraces.ts", "src/tracer/traceFile.ts"]
+    kill_condition: "test: tests/tracer.test.ts::reports calls the inventory does not know under UNINVENTORIED with file and line"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: the four direct wrapper calls in examples/sample-api/__tests__/database.test.js appear under UNINVENTORIED with lines 6, 10, 11, 12"
+
+  - id: c6
+    claim: "With FAILWALK_SITE=<id> and FAILWALK_MODE=500, only the call whose caller frame resolves to that id rejects, with an Error carrying status 500 (also statusCode, http_status_code and response.status) and a message naming the wrapper and method; the same wrapper method called from other lines runs the real function, and the trace record counts how many times the injection fired"
+    confidence: 0.9
+    criteria: [6]
+    files: ["src/tracer/injection.ts", "src/tracer/modes.ts", "src/tracer/handleCall.ts"]
+    kill_condition: "test: tests/injection.test.ts::rejects exactly the targeted call site with a vendor-shaped 500 and leaves every other call real"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: injecting database.update at subscriptions.js:14 fails only the sync test; the three other database.update sites keep passing and fired is 1"
+
+  - id: c7
+    claim: "A half-set pair (only FAILWALK_SITE or only FAILWALK_MODE) or an unknown mode makes the setup file throw at load instead of running a clean-looking trace"
+    confidence: 0.95
+    criteria: [6]
+    files: ["src/tracer/injection.ts"]
+    kill_condition: "test: tests/injection.test.ts::throws on half a pair or an unknown mode"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c8
+    claim: "Without FAILWALK_SITE the setup file only records: every test in the sample suite has the same status with the tracer loaded as without it, and the run's success flag is the same"
+    confidence: 0.9
+    criteria: [7]
+    files: ["src/tracer/setup.ts", "src/tracer/wrapExports.ts"]
+    kill_condition: "test: tests/tracer.test.ts::changes no test result compared with a run without the setup file"
+    verified_by:
+      - "cmd: npm test"
+      - "obs: npx jest --config examples/sample-api/jest.failwalk.config.js reports 8 passed, same as the plain config"
+
+  - id: c9
+    claim: "The wrapped exports are a Proxy over the real module: a method called through the proxy receives the real object as this, repeated property reads return the same wrapped value, a frozen property is returned unchanged, and the real exports object is never modified"
+    confidence: 0.8
+    criteria: [4, 7]
+    files: ["src/tracer/wrapExports.ts"]
+    kill_condition: "test: tests/injection.test.ts::reports the member chain, calls the real function with the real this, and can replace a result"
+    verified_by:
+      - "cmd: npm test"
+
+  - id: c10
+    claim: "`npm test` builds the TypeScript, runs the vitest suite covering criteria 1 to 7 against examples/sample-api and tests/fixtures/esm-service, then runs the sample app's own Jest suite, and exits 0"
+    confidence: 0.9
+    criteria: [8]
+    files: ["package.json", "vitest.config.mts", "tsconfig.json"]
+    kill_condition: "cmd: npm test"
+    verified_by:
+      - "cmd: npm test (39 vitest tests and 8 sample tests, exit 0, on Node 24.21.0 and Node 20.20.2)"
+
+  - id: c11
+    claim: "examples/sample-api is an Express app whose own Jest suite passes with `npm test --prefix examples/sample-api`; its controllers call three wrappers under config/ through a plain require (database.update), a member chain (billing.subscriptions.retrieve), inside try/catch (billing.subscriptions.cancel at line 33), inside a for retry loop (billing.invoices.list at line 18), and controllers/receipts.js holds call sites no test reaches"
+    confidence: 0.95
+    criteria: [9]
+    files: ["examples/sample-api/app.js", "examples/sample-api/controllers/subscriptions.js", "examples/sample-api/controllers/invoices.js", "examples/sample-api/controllers/receipts.js", "examples/sample-api/config/billing.js", "examples/sample-api/config/database.js", "examples/sample-api/config/mailer.js", "examples/sample-api/jest.config.js", "examples/sample-api/jest.failwalk.config.js", "examples/sample-api/package.json", "examples/sample-api/__tests__/subscriptions.test.js", "examples/sample-api/__tests__/invoices.test.js", "examples/sample-api/__tests__/database.test.js"]
+    kill_condition: "cmd: npm test --prefix examples/sample-api"
+    verified_by:
+      - "cmd: npm test --prefix examples/sample-api (8 passed)"
+      - "obs: node dist/cli.js trace lists database.get@controllers/receipts.js:13 and mailer.send@controllers/receipts.js:15 under UNREACHED"
+
+  - id: c12
+    claim: "The README's inventory summary, trace summary and both cell outputs are pasted from real runs against examples/sample-api, and the chosen cell (database.update@controllers/subscriptions.js:51 with mode 500) is a CRASH: Jest reports the injected error itself, with no assertion failure, and the trace record shows fired: 1"
+    confidence: 0.9
+    criteria: [9]
+    files: ["examples/sample-api/controllers/subscriptions.js"]
+    kill_condition: "test: tests/injection.test.ts::a floating promise at the injected site surfaces as a crash: the injected error itself fails the test"
+    verified_by:
+      - "obs: ran the README commands from the repo root and copied their output; the trace folder for the cell run holds fired: 1"
+
+  - id: c13
+    claim: "No file under src, tests or examples, and no line of README.md, names, links or reads a real-world vendor, SaaS service or code repository; the libraries the tool is built on (Babel, Jest, Express, commander, fast-glob, vitest) and claimcheck are named only as tools, with no link; the wrappers are generic (billing, database, mailer, vendor, queue) and failwalk reads only the paths it is given"
+    confidence: 0.85
+    criteria: [10]
+    files: ["src/tracer/modes.ts", "src/inventory/types.ts", "src/inventory/wrapperName.ts"]
+    kill_condition: "cmd: ! grep -rniE 'chargebee|firebase|stripe|algolia|api-v4|tonebase|github\\.com|https?://' src tests examples README.md"
+    verified_by:
+      - "cmd: grep -rniE 'chargebee|firebase|api-v4|tonebase|algolia|mux|github.com|https?://' src tests examples README.md (no matches)"
+
+  - id: c14
+    claim: "Every source file under src is TypeScript using arrow-function consts, each with a doc block (the CLI actions are named consts, not inline callbacks), taking one named-params object except where a library fixes the signature (Babel's visitor callback, the Proxy get, apply and construct traps, Array comparators, which the doc blocks say), lookup tables where a key picks a behaviour (plugins by extension, skip rules, read verbs, modes), no classes, no let or var, and no mutation of function inputs; no await sits inside a loop over a collection"
+    confidence: 0.8
+    criteria: [11]
+    files: ["src/inventory/findCallSites.ts", "src/tracer/wrapExports.ts", "src/cli.ts"]
+    kill_condition: "cmd: ! grep -rnE '^\\s*(export )?(class|function|var|let) ' src --include=*.ts"
+    verified_by:
+      - "obs: read every file in src; the three push calls are onto local accumulators inside Babel's callback traversal, every sort runs on a freshly built array, and traceState is the documented module singleton"
