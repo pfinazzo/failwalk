@@ -1,0 +1,42 @@
+{
+  "name": "failwalk",
+  "version": "0.1.0",
+  "description": "Failure-mode coverage for dependency calls. Runs your test suite with one vendor failure injected at a time and reports which call sites survive.",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "failwalk": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && vitest run && npm test --prefix examples/sample-api",
+    "failwalk": "node dist/cli.js",
+    "test:tool": "npm run build && vitest run",
+    "test:sample": "npm test --prefix examples/sample-api"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.12",
+    "@babel/traverse": "^7.29.12",
+    "@babel/types": "^7.29.11",
+    "commander": "^15.0.0",
+    "fast-glob": "^3.3.3",
+    "source-map-support": "^0.5.21"
+  },
+  "devDependencies": {
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^24.0.0",
+    "@types/source-map-support": "^0.5.10",
+    "express": "^5.3.0",
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

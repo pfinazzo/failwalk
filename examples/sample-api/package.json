@@ -1,0 +1,11 @@
+{
+  "name": "sample-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small Express service that calls two fake vendors through wrapper modules. The dogfood target for failwalk.",
+  "scripts": {
+    "test": "jest --config jest.config.js",
+    "test:failwalk": "jest --config jest.failwalk.config.js"
+  },
+  "x-note": "express, supertest and jest come from the repo root's node_modules. Run npm install at the repo root first."
+}
