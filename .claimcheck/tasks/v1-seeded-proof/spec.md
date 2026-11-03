@@ -1,0 +1,13 @@
+# Acceptance criteria
+
+Task: failwalk v1, step 7 of the build order in `SPEC.md`: the seeded-bug proof. Base branch for the diff: `main`.
+Frozen with `claimcheck spec freeze`. Add nothing after the diff starts.
+
+- [ ] 1. `tests/proof/seeds.ts` holds one lookup table, `SEEDS`, with exactly three rows named `swallowed-catch`, `retry-without-idempotency-key` and `no-timeout`. Each row names a file under `examples/sample-api` that is clean of that pattern, an exact `before` string that occurs once in that file, an `after` string that plants the bug, and the finding failwalk must then report: the call-site id and the check name.
+- [ ] 2. The three target files are clean before seeding: on an unseeded copy of the sample app, `failwalk run` reports no `RISK` cell and no `CRASH` cell for any of the three target call sites. The proof asserts this, so a seed cannot "find" a bug that was already there.
+- [ ] 3. `tests/proof/seeded.test.ts` copies `examples/sample-api` into a fresh folder made with `fs.mkdtempSync` under the OS temp directory, applies one seed at a time to its own fresh copy, runs `failwalk run` against that copy, and asserts the seed's expected finding appears in that run's `failwalk.json`. It never edits `examples/sample-api` itself and removes each copy when done.
+- [ ] 4. A seed that failwalk misses fails the proof with a message that names the seed, the call-site id it expected, and the verdict and checks failwalk reported for that site instead. The message is built from the run's `failwalk.json`, not guessed.
+- [ ] 5. `npm run prove` runs the proof alone, and `npm test` includes it; both exit 0 with all three seeds found. Running `npm test` on Node 24 takes under 5 minutes on a laptop.
+- [ ] 6. `src/proof/applySeed.ts` exports a pure function that takes the source text and a seed row and returns the seeded text, throwing when `before` does not occur exactly once. The test uses it; it does no IO.
+- [ ] 7. The README gains a "Step 7: the proof" section showing the three seeds, each as its `before` and `after` lines and the cell it produced in a real run, and the real last lines of `npm run prove`. It ends with one plain-words paragraph on why the proof exists: a coverage number nobody has checked against a known bug is a guess.
+- [ ] 8. Nothing in failwalk names, reads or depends on any real-world service or repository, and all new source follows the conventions in `~/.claude/CLAUDE.md`: arrow-function consts, one named-params object per function, lookup tables instead of branch chains, a doc block on every function, no classes, no mutation of inputs, no `await` inside a loop over a collection.
