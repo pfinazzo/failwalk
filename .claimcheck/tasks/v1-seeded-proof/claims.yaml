@@ -1,0 +1,112 @@
+# claimcheck claims file for failwalk v1 step 7: the seeded-bug proof.
+# One entry per thing the author asserts about this diff. The diff is against main.
+# The proof's own files live under tests/proof, which the config ignores for planted bugs; the product-code files in the
+# diff are src/proof/applySeed.ts, package.json and vitest.config.mts.
+version: 1
+author: "claude-code/claude-fable-5-1"
+base: "main"
+claims:
+  - id: c1
+    claim: "tests/proof/seeds.ts exports SEEDS, a Record keyed by exactly the three names swallowed-catch, retry-without-idempotency-key and no-timeout, and SEED_NAMES listing them in that order; each row is a Seed with name, file (controllers/subscriptions.js for the first two, config/database.js for the third), before, after, site, check and harm; the two subscriptions.js seeds name sites :14 and :34 and the database.js seed names site :14, and each row's check equals its name"
+    confidence: 0.95
+    criteria: [1]
+    files: ["tests/proof/seeds.ts", "src/proof/applySeed.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::every row's before occurs exactly once in its clean file, and its after differs"
+    verified_by:
+      - "cmd: npm run prove"
+
+  - id: c2
+    claim: "Each seed's before text occurs exactly once in the named file of examples/sample-api as it is on this branch, and each after keeps the wrapper call on the same line as the before did: the swallowed-catch after starts with `  try { await database.update({` on the call's line, the retry after is one line starting with `for (let attempt = 1;`, and the no-timeout after replaces the five-line exports block of config/database.js with `module.exports = { get, update, remove };`"
+    confidence: 0.95
+    criteria: [1]
+    files: ["tests/proof/seeds.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::every row's before occurs exactly once in its clean file, and its after differs"
+    verified_by:
+      - "cmd: npm run prove"
+      - "obs: on a seeded copy the inventory lists the site at the same line as the clean copy, with the seed's check added"
+
+  - id: c3
+    claim: "The proof's first test reads the unseeded walk's failwalk.json and, for each of the three target sites, asserts the site is in inventory.sites, its checks array does not contain the seed's check, it has at least one cell, and no cell of it has verdict RISK or CRASH; on the current sample app all three hold because the two sites are FAIL under dropped, 500 and 429, HANG under timeout and PASS under malformed and partial, with no checks"
+    confidence: 0.93
+    criteria: [2]
+    files: ["tests/proof/seeded.test.ts", "tests/proof/walk.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::every target site is clean before seeding: in the inventory, without the seed's check, with no RISK and no CRASH cell"
+    verified_by:
+      - "cmd: npm run prove"
+
+  - id: c4
+    claim: "copySampleApp in tests/proof/walk.ts makes the folder with fs.mkdtempSync under fs.realpathSync.native(os.tmpdir()), copies examples/sample-api into <folder>/sample-api with fs.cpSync, filtering out any node_modules, symlinks the repo's node_modules into the copy, and makes <folder>/out; walkCopy spawns dist/cli.js run with --root <copy> --out-dir <folder>/out --test-timeout-ms 2000 and rejects, with the runner's stderr, when no failwalk.json was written; removeCopy deletes the whole folder; the test's afterAll removes every copy"
+    confidence: 0.94
+    criteria: [3]
+    files: ["tests/proof/walk.ts", "tests/proof/seeded.test.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::the seeds edited only their copies: the files under examples/sample-api are unchanged"
+    verified_by:
+      - "cmd: npm run prove"
+      - "cmd: ls /private/var/folders/*/*/T/ | grep failwalk-proof (no folders left after the run)"
+
+  - id: c5
+    claim: "The proof applies one seed per copy: walkSeeded copies the app, rewrites only seed.file in that copy through applySeed, and walks it; the four walks (one clean, three seeded) run at once through Promise.all in beforeAll; the per-seed test asserts a cell at seed.site with verdict RISK whose checks include seed.check, and that the inventory record for the site lists the check; a further test asserts the seeded site's checks equal the clean site's checks plus exactly the seed's check, and that each seeded walk exited 0"
+    confidence: 0.94
+    criteria: [3, 5]
+    files: ["tests/proof/seeded.test.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::failwalk finds the seed swallowed-catch: a RISK cell at the expected site naming the check"
+    verified_by:
+      - "cmd: npm run prove"
+
+  - id: c6
+    claim: "A missed seed fails with the message `Seed \"<name>\" was missed. Expected a RISK cell at <site> with the check <check>. failwalk reported for that site:` followed by describeSite's output, which is built from that walk's report: one line per cell of the site as `  <mode>: <verdict>, checks [<names>]`, or, when the inventory has no site with that id, one line naming the inventory's sites in the same file; the message is passed as the second argument of expect so vitest prints it on failure"
+    confidence: 0.93
+    criteria: [4]
+    files: ["tests/proof/seeded.test.ts", "tests/proof/walk.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::a miss message is built from the report: every mode's verdict and checks for the site, or the sites the file does have"
+    verified_by:
+      - "cmd: npm run prove"
+
+  - id: c7
+    claim: "package.json gains the script `prove`: `npm run build && vitest run tests/proof`; vitest.config.mts includes tests/proof/*.test.ts beside tests/*.test.ts, so the unchanged `test` script (`npm run build && vitest run && npm test --prefix examples/sample-api`) runs the proof too; no other script changed"
+    confidence: 0.96
+    criteria: [5]
+    files: ["package.json", "vitest.config.mts"]
+    kill_condition: "cmd: npm run prove 2>&1 | grep -q 'Test Files  1 passed' && npm test 2>&1 | grep -q 'Test Files  12 passed'"
+    verified_by:
+      - "cmd: npm run prove"
+      - "cmd: npm test"
+
+  - id: c8
+    claim: "On Node 24.21.0 on this laptop, `npm run prove` exits 0 with 10 tests passed in about 23 seconds, and `npm test` exits 0 with 126 vitest tests in 12 files and the sample app's 14 Jest tests in about 35 seconds, under the five-minute limit; the four walks of the proof take about 15 seconds together because they run at once"
+    confidence: 0.9
+    criteria: [5]
+    files: ["tests/proof/seeded.test.ts"]
+    kill_condition: "cmd: time npm test (exit 0, real under 5m)"
+    verified_by:
+      - "cmd: time npm test (real 0m34.681s)"
+      - "cmd: npm run prove (Duration 23.17s)"
+
+  - id: c9
+    claim: "src/proof/applySeed.ts exports the types SeedName and Seed and the pure function applySeed({ text, seed }), which splits text on seed.before, throws `Seed \"<name>\": its before text occurs <n> times in <file>, not once` when the split does not give exactly two parts, and otherwise returns the parts joined with seed.after; it imports only the CheckName type, does no IO, and does not change its inputs; the test uses it for every seeded copy"
+    confidence: 0.96
+    criteria: [6]
+    files: ["src/proof/applySeed.ts"]
+    kill_condition: "test: tests/proof/seeded.test.ts::throws, naming the seed and the count, when before is absent or occurs twice"
+    verified_by:
+      - "cmd: npm run prove"
+      - "cmd: grep -c 'node:fs' src/proof/applySeed.ts (0)"
+
+  - id: c10
+    claim: "README.md gains a section `## Step 7: the proof` before `## Using it on your own project` that shows the three seeds as a table and, per seed, its before and after text as code blocks and the RISK rows it produced in a real run (five rows for swallowed-catch at :14, two for retry-without-idempotency-key at :34 under malformed and partial, two for no-timeout at :14 under malformed and partial), then the real last four lines of `npm run prove` (10 tests, 23.17s), and ends with the paragraph `### Why the proof exists` that says a coverage number nobody has checked against a known bug is a guess; the Development section's counts become 126 tests and 35 seconds and name `npm run prove` and the `v1-seeded-proof` task"
+    confidence: 0.92
+    criteria: [7]
+    files: ["README.md"]
+    kill_condition: "cmd: grep -c 'checks: swallowed-catch' README.md (at least 10) && grep -q 'A coverage number nobody has checked against a known bug is a guess' README.md"
+    verified_by:
+      - "obs: the grid rows were copied from the terminal output of `failwalk run` on each seeded copy, and the prove lines from the terminal"
+
+  - id: c11
+    claim: "No file added or changed by this diff names, reads or depends on a real-world vendor, service or repository: the seeds edit the stand-in sample app only, and the proof's helpers spawn the repo's own dist/cli.js; every new function in src/proof and tests/proof is an arrow-function const with a doc block that takes one named-params object (or none), there is no class, no `this`, no `let` reassigned from several functions, no if/else ladder mapping a key to a behaviour, no mutation of a parameter, and no `await` inside a loop over a collection: the four walks are a Promise.all"
+    confidence: 0.92
+    criteria: [8]
+    files: ["src/proof/applySeed.ts", "tests/proof/seeds.ts", "tests/proof/seeded.test.ts", "tests/proof/walk.ts"]
+    kill_condition: "cmd: grep -nE 'class |this\\.|for await|else if' src/proof/*.ts tests/proof/*.ts (no matches)"
+    verified_by:
+      - "cmd: grep -nE 'class |this\\.|for await|else if' src/proof/*.ts tests/proof/*.ts"
+      - "cmd: grep -rniE 'chargebee|stripe|github.com|firebase' src/proof tests/proof (no matches)"

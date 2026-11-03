@@ -19,7 +19,8 @@
     "test": "npm run build && vitest run && npm test --prefix examples/sample-api",
     "failwalk": "node dist/cli.js",
     "test:tool": "npm run build && vitest run",
-    "test:sample": "npm test --prefix examples/sample-api"
+    "test:sample": "npm test --prefix examples/sample-api",
+    "prove": "npm run build && vitest run tests/proof"
   },
   "dependencies": {
     "@babel/parser": "^7.29.12",

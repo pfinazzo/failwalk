@@ -1,0 +1,40 @@
+{
+  "criteria": [
+    {
+      "id": 1,
+      "sha256": "8f6777967d37f63e7c8c43aeacd5a67f7df600091cc572e459c3ba798f28e3cb"
+    },
+    {
+      "id": 2,
+      "sha256": "6259d07b9fb28639b29422518053d7d5c23d0cddf912aba4f799b9f215c324e6"
+    },
+    {
+      "id": 3,
+      "sha256": "8f2084eb88b72e75cb40eed581293e05660e52743512504d3fd436912d564905"
+    },
+    {
+      "id": 4,
+      "sha256": "414f737ab497b13111cd6f433ecc827ba77a99c0211064b5a7978d7cc469b1ae"
+    },
+    {
+      "id": 5,
+      "sha256": "ad20bc2df9ae25ab395ee745d83480b153ad37ae8350afa3e05000d820ede2e2"
+    },
+    {
+      "id": 6,
+      "sha256": "08d83be7b809990359c9e1cbf2a3936573c6569d27759851482c5d53c6785ee5"
+    },
+    {
+      "id": 7,
+      "sha256": "19f2049c0964531a480f4244d8e3caba3019f21c672ded0f661cdd1ba81e7e19"
+    },
+    {
+      "id": 8,
+      "sha256": "48515353ab1f369ab6e93e97a064a7895305e347ac6c52a2ea500263d1a986f4"
+    }
+  ],
+  "frozen_at": "2026-11-03T02:10:24Z",
+  "git_head": "3d8d0a3b9f264286e3ea7c742e7ec5464e452caf",
+  "spec_sha256": "364823a079c2fe5a85f8b5c5793020de0ddf8a77fae405e0acb6b2aff66800b4",
+  "version": 1
+}

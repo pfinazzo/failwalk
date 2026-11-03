@@ -4,7 +4,7 @@ Failure-mode coverage for dependency calls.
 
 Line coverage says your code called the billing vendor. It says nothing about what the code does when that call fails. Failwalk finds every place your code calls a vendor or database through a wrapper module, records which tests reach each place, then runs those tests with one failure injected at a time and reports what happened.
 
-This is v1, steps 1 to 5 of the build order in [SPEC.md](SPEC.md): the inventory, the tracer, the failure-mode table, the grid of every call site against every failure mode, filled by one command, and the five static checks that turn a PASS into a RISK.
+This is v1, steps 1 to 7 of the build order in [SPEC.md](SPEC.md): the inventory, the tracer, the failure-mode table, the grid of every call site against every failure mode, filled by one command, the five static checks that turn a PASS into a RISK, the map, and the proof that plants three known bugs and shows failwalk finds each one.
 
 ## What is here
 
@@ -19,6 +19,7 @@ This is v1, steps 1 to 5 of the build order in [SPEC.md](SPEC.md): the inventory
 | `failwalk plan` | Builds one cell per (call site, mode) from the inventory and the trace, with the tests to run for each. |
 | `failwalk run` | Inventory, traced baseline, plan, then one runner process per cell through a bounded pool, a verdict per cell, `RISK` where a check fired on a passing cell, `failwalk.json` and the terminal grid. |
 | `failwalk ui` | Draws the grid as a 3D map in one self-contained HTML page and opens it. Red, amber and grey cells are the failure paths nobody has walked. |
+| `npm run prove` | Plants three known bugs in fresh copies of the sample app, one at a time, and fails unless failwalk reports each one at the line it was planted. |
 | `examples/sample-api` | A small Express app with three wrapper modules and its own Jest suite, including one route per static check. The target for the output below. |
 
 Failwalk runs inside your test suite. It never touches a deployed environment.
@@ -735,6 +736,131 @@ Before a run, the page still works. With an inventory but no trace, every cell i
 
 The look and the walkthrough follow the system map pages built with the same family of tools, so the two read as one. [docs/decisions.md](docs/decisions.md) says why the map is one file and why rows are call sites.
 
+## Step 7: the proof
+
+Three known bugs are planted in the sample app, one at a time, and failwalk must find each one. `npm run prove` runs the proof alone. `npm test` includes it.
+
+### The seeds
+
+One lookup table in [tests/proof/seeds.ts](tests/proof/seeds.ts), keyed by seed name. Each row names one sample-app file that is clean of its pattern, the exact text to replace, the text that plants the bug, and the finding failwalk must then report: a call-site id and a check name. [src/proof/applySeed.ts](src/proof/applySeed.ts) makes the edit on a string and throws when the `before` text is not found exactly once.
+
+| Seed | File edited | Site that must be reported | Check |
+| --- | --- | --- | --- |
+| `swallowed-catch` | `controllers/subscriptions.js` | `database.update@controllers/subscriptions.js:14` | `swallowed-catch` |
+| `retry-without-idempotency-key` | `controllers/subscriptions.js` | `database.update@controllers/subscriptions.js:34` | `retry-without-idempotency-key` |
+| `no-timeout` | `config/database.js` | `database.update@controllers/subscriptions.js:14` | `no-timeout` |
+
+Every `after` keeps the wrapper call on its original line. The site id carries the line number, so the same id names the site before and after the edit, and the proof can show the site was clean first.
+
+**`swallowed-catch`.** The write that copies a subscription into the database gets a `try` whose `catch` does nothing. In production the local copy is never written and the route still answers 200 with the vendor's record.
+
+Before:
+
+```js
+  await database.update({
+    path: `subscriptions/${subscriptionId}`,
+    value: { status: subscription.status, plan: subscription.plan_id },
+  });
+```
+
+After:
+
+```js
+  try { await database.update({
+    path: `subscriptions/${subscriptionId}`,
+    value: { status: subscription.status, plan: subscription.plan_id },
+  }); } catch {}
+```
+
+The cells it produced in a real run:
+
+```
+  RISK      dropped   database.update@controllers/subscriptions.js:14   fired 1; checks: swallowed-catch
+  RISK      500       database.update@controllers/subscriptions.js:14   fired 1; checks: swallowed-catch
+  RISK      429       database.update@controllers/subscriptions.js:14   fired 1; checks: swallowed-catch
+  RISK      malformed database.update@controllers/subscriptions.js:14   fired 1; checks: swallowed-catch
+  RISK      partial   database.update@controllers/subscriptions.js:14   fired 1; checks: swallowed-catch
+```
+
+**`retry-without-idempotency-key`.** The write that records a cancellation is wrapped in a three-attempt loop with a wait between attempts and no idempotency key. In production a write whose answer was lost is sent again as a new write.
+
+Before:
+
+```js
+    await database.update({ path: `subscriptions/${subscriptionId}`, value: { status: cancelled.status } });
+```
+
+After:
+
+```js
+    for (let attempt = 1; attempt <= 3; attempt += 1) { try { await database.update({ path: `subscriptions/${subscriptionId}`, value: { status: cancelled.status } }); break; } catch (error) { if (attempt === 3) throw error; await new Promise((resolve) => setTimeout(resolve, 10)); } }
+```
+
+The cells it produced in a real run:
+
+```
+  RISK      malformed database.update@controllers/subscriptions.js:34   fired 1; checks: retry-without-idempotency-key
+  RISK      partial   database.update@controllers/subscriptions.js:34   fired 1; checks: retry-without-idempotency-key
+```
+
+Under `dropped`, `500` and `429` the same site is FAIL: the three attempts all fail, the route answers 202, and the test notices. The check still names the site in every cell, and in the inventory.
+
+**`no-timeout`.** The database wrapper's exports lose their time limit. The edit is in the wrapper, so every database call fires the check; the row names the call the proof asserts on. In production a database that accepts the connection and never answers holds every request that writes a subscription open for ever.
+
+Before:
+
+```js
+module.exports = {
+  get: timed({ method: get, timeoutMs: DATABASE_TIMEOUT_MS, what: "database.get" }),
+  update: timed({ method: update, timeoutMs: DATABASE_TIMEOUT_MS, what: "database.update" }),
+  remove: timed({ method: remove, timeoutMs: DATABASE_TIMEOUT_MS, what: "database.remove" }),
+};
+```
+
+After:
+
+```js
+module.exports = { get, update, remove };
+```
+
+The cells it produced in a real run:
+
+```
+  RISK      malformed database.update@controllers/subscriptions.js:14   fired 1; checks: no-timeout
+  RISK      partial   database.update@controllers/subscriptions.js:14   fired 1; checks: no-timeout
+```
+
+### How the proof runs
+
+[tests/proof/seeded.test.ts](tests/proof/seeded.test.ts) does four walks, all at once, each on its own copy of `examples/sample-api` in a fresh folder under the OS temp directory with the repo's `node_modules` linked in. The first copy is unseeded. For each of the three target sites it asserts the site is in the inventory, its checks do not include the seed's check, and no cell of it is RISK or CRASH. Each other copy gets one seed. The proof then reads that walk's `failwalk.json` and asserts a RISK cell at the seed's site names the seed's check, and that the site's checks grew by exactly that one name. The copies are deleted when the proof ends, and the files under `examples/sample-api` are checked afterwards to be unchanged.
+
+A seed failwalk misses fails the proof with a message built from the report, not guessed. It names the seed, the site it expected, and what failwalk reported for that site instead, one line per mode. Had the `no-timeout` seed been missed, the message would have read:
+
+```
+Seed "no-timeout" was missed. Expected a RISK cell at database.update@controllers/subscriptions.js:14 with the check no-timeout. failwalk reported for that site:
+  timeout: HANG, checks []
+  dropped: FAIL, checks []
+  500: FAIL, checks []
+  429: FAIL, checks []
+  malformed: PASS, checks []
+  partial: PASS, checks []
+```
+
+The rule for a miss: do not weaken the seed or the assertion. Either the check has a hole, or the spec describes a pattern the check was never written to see. Both are findings to report before writing more code.
+
+The real last lines of `npm run prove`, on this laptop:
+
+```
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  21:23:03
+   Duration  23.17s (tests 100%)
+```
+
+### Why the proof exists
+
+The headline says 43 of 90 cells are covered. That number came from a tool reading its own output, and nobody had put a bug in front of the tool to see whether it noticed. A coverage number nobody has checked against a known bug is a guess. The proof plants three bugs that failwalk's own checks are built to find, in places that were clean, and shows that the number moves for each one. If a later change to a check or to the tracer stops one of them being found, `npm test` says so before anyone trusts the number again.
+
 ## Using it on your own project
 
 1. Build failwalk: `npm install && npm run build`.
@@ -762,6 +888,6 @@ If a test mocks the whole wrapper with `jest.mock`, the mock replaces the tracer
 npm test
 ```
 
-That builds, runs 116 tests against `examples/sample-api`, a small ES-module fixture and a fixture of static-check cases, including one full `failwalk run` and the shaping of the map, then runs the sample app's own 14 tests.
+That builds, runs 126 tests against `examples/sample-api`, a small ES-module fixture and a fixture of static-check cases, including one full `failwalk run`, the shaping of the map and the seeded-bug proof, then runs the sample app's own 14 tests. On this laptop the whole of `npm test` takes 35 seconds. `npm run prove` runs the proof alone.
 
-This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-static-checks` for step 5, `v1-ui` for the map.
+This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-static-checks` for step 5, `v1-ui` for the map, `v1-seeded-proof` for step 7.
