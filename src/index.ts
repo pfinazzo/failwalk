@@ -2,6 +2,12 @@ export { scanInventory, countByWrapper, formatInventorySummary, DEFAULT_IGNORE }
 export { findCallSites } from "./inventory/findCallSites";
 export { kindOfMethod, READ_VERBS } from "./inventory/kinds";
 export type { CallSite, CallKind, Inventory } from "./inventory/types";
+export { STATIC_CHECKS, CHECK_NAMES, checksFor, notesFor, retryScopeOf, TIMEOUT_NAMES } from "./inventory/staticChecks";
+export type { CheckName, Note, CheckInput, StaticCheck } from "./inventory/staticChecks";
+export { wrapperTimeoutsOf, hasTimeout, NO_TIMEOUTS } from "./inventory/wrapperTimeouts";
+export type { WrapperTimeouts } from "./inventory/wrapperTimeouts";
+export { parseSource } from "./inventory/parseSource";
+export { descendantsOf, calleeNameOf, functionNameOf, propertyNameOf } from "./inventory/ast";
 export { MODES, MODE_NAMES, vendorError, droppedError, halveResult } from "./tracer/modes";
 export type { ModeName, Mode } from "./tracer/modes";
 export { buildPlan, formatPlanSummary } from "./plan/buildPlan";

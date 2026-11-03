@@ -69,14 +69,16 @@ const resolveConfig = ({ root, config }: { root: string; config?: string }): str
  *
  * @param params.cell - the planned cell
  * @param params.evidence - the cell's evidence, or null when it did not run
- * @returns the cell with its verdict
+ * @param params.checks - the static checks that fired on the cell's site
+ * @returns the cell with its verdict and its checks
  */
-const toCellResult = ({ cell, evidence }: { cell: PlanCell; evidence: CellEvidence | null }): CellResult => ({
+const toCellResult = ({ cell, evidence, checks }: { cell: PlanCell; evidence: CellEvidence | null; checks: readonly string[] }): CellResult => ({
   site: cell.site,
   wrapper: cell.wrapper,
   mode: cell.mode,
   tests: cell.tests,
-  verdict: evidence ? verdictFor({ evidence }) : "UNREACHED",
+  verdict: evidence ? verdictFor({ evidence, checks }) : "UNREACHED",
+  checks: [...checks],
   evidence,
 });
 
@@ -116,13 +118,14 @@ export const runWalk = async ({ root, wrappers, ignore, config, outDir, concurre
   fs.writeFileSync(path.join(absoluteOut, "failwalk-plan.json"), JSON.stringify(plan, null, 2));
   log({ line: formatPlanSummary({ plan }).split("\n")[0] });
 
+  const checksBySite = inventory.sites.reduce<Record<string, readonly string[]>>((acc, site) => ({ ...acc, [site.id]: site.checks }), {});
   const planned = plan.cells.map((cell, index) => ({ cell, index })).filter(({ cell }) => cell.verdict === null);
   const results = await runPool({
     items: planned,
     concurrency,
     work: async ({ item, index }) => {
       const evidence = await runCell({ cell: item.cell, index: item.index, context });
-      const result = toCellResult({ cell: item.cell, evidence });
+      const result = toCellResult({ cell: item.cell, evidence, checks: checksBySite[item.cell.site] ?? [] });
       log({
         line: `[${index + 1}/${planned.length}] ${result.verdict.padEnd(6)} ${item.cell.mode.padEnd(9)} ${item.cell.site}  (${(evidence.durationMs / 1000).toFixed(1)}s, fired ${evidence.fired})`,
       });
@@ -130,7 +133,7 @@ export const runWalk = async ({ root, wrappers, ignore, config, outDir, concurre
     },
   });
   const resultsBySite = results.reduce<Record<string, CellResult>>((acc, result) => ({ ...acc, [`${result.site}\n${result.mode}`]: result }), {});
-  const cells = plan.cells.map((cell) => resultsBySite[`${cell.site}\n${cell.mode}`] ?? toCellResult({ cell, evidence: null }));
+  const cells = plan.cells.map((cell) => resultsBySite[`${cell.site}\n${cell.mode}`] ?? toCellResult({ cell, evidence: null, checks: checksBySite[cell.site] ?? [] }));
   const covered = coveredFraction({ cells });
   const report: RunReport = {
     generatedAt: new Date().toISOString(),

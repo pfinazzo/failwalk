@@ -17,8 +17,8 @@ const inventory: Inventory = {
   wrapperBase: "config",
   wrapperFiles: ["config/billing.js", "config/mailer.js"],
   sites: [
-    { id: RETRIEVE, file: "controllers/subscriptions.js", line: 12, wrapper: "billing", method: "subscriptions.retrieve", kind: "read" },
-    { id: SEND, file: "controllers/receipts.js", line: 15, wrapper: "mailer", method: "send", kind: "write" },
+    { id: RETRIEVE, file: "controllers/subscriptions.js", line: 12, wrapper: "billing", method: "subscriptions.retrieve", kind: "read", checks: [], notes: [] },
+    { id: SEND, file: "controllers/receipts.js", line: 15, wrapper: "mailer", method: "send", kind: "write", checks: ["no-timeout"], notes: [] },
   ],
   errors: [],
 };
@@ -101,9 +101,9 @@ describe("failwalk plan on the sample app (criterion 2)", () => {
     fs.writeFileSync(path.join(dir, "failwalk-trace.json"), JSON.stringify({ ...trace, tests: [] }));
     const { status, stdout } = runCli({ args: ["plan", "--root", SAMPLE_API], cwd: dir });
     expect(status).toBe(0);
-    expect(stdout).toContain("60 cells");
+    expect(stdout).toContain("90 cells");
     const plan = JSON.parse(fs.readFileSync(path.join(dir, "failwalk-plan.json"), "utf8")) as Plan;
-    expect(plan.cells).toHaveLength(60);
+    expect(plan.cells).toHaveLength(90);
     expect(plan.cells.every((cell) => cell.verdict === "UNREACHED" && cell.tests.length === 0)).toBe(true);
   });
 

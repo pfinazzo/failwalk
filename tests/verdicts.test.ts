@@ -68,3 +68,23 @@ describe("the verdict lookup (criterion 5)", () => {
     expect(verdictFor({ evidence: evidenceWith({ outcomes: ["assertion", "passed"] }) })).toBe("FAIL");
   });
 });
+
+describe("the RISK rule (criterion 9)", () => {
+  test("a PASS whose site has a fired check is RISK", () => {
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["passed", "passed"] }), checks: ["unawaited-call"] })).toBe("RISK");
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["passed"] }), checks: ["swallowed-catch", "no-timeout"] })).toBe("RISK");
+  });
+
+  test("a PASS with no fired check stays PASS, with or without the checks argument", () => {
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["passed"] }), checks: [] })).toBe("PASS");
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["passed"] }) })).toBe("PASS");
+  });
+
+  test("every other verdict is unchanged by fired checks", () => {
+    const checks = ["unawaited-call"];
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["assertion"] }), checks })).toBe("FAIL");
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["timeout"] }), checks })).toBe("HANG");
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["error"] }), checks })).toBe("CRASH");
+    expect(verdictFor({ evidence: evidenceWith({ outcomes: ["passed"], ran: false }), checks })).toBe("CRASH");
+  });
+});
