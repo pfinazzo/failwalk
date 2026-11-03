@@ -1,0 +1,52 @@
+{
+  "criteria": [
+    {
+      "id": 1,
+      "sha256": "42b3c4dfb9782380644114268dffb6b5c5c2abbb37c05d87c1a75c80bcae23ae"
+    },
+    {
+      "id": 2,
+      "sha256": "d88fc4f3c3836828688abc3dccbfce3851ae63ead0f97d8f865b45d8118f84b1"
+    },
+    {
+      "id": 3,
+      "sha256": "165408f28b0387a3f4234cc4a2545b5500f8cdbccbd0f9bf85d7d6f9a74dc567"
+    },
+    {
+      "id": 4,
+      "sha256": "2d0f4bb3961ab29b2b72190d35f1d3ae51cbb965515b3cc7a3e08206fef03718"
+    },
+    {
+      "id": 5,
+      "sha256": "dfa4e48ec153f2f9aadb5dd26dd80d06acfff9f504108840d052e904418222a7"
+    },
+    {
+      "id": 6,
+      "sha256": "b79afb72a889543cc3a11c9d2c773a384c615ef9d453bcdca3edeee756e6ae07"
+    },
+    {
+      "id": 7,
+      "sha256": "d4eb3683888e720fbfd9aac463f448f26367bb779ada96d7f528488e5d1729e8"
+    },
+    {
+      "id": 8,
+      "sha256": "8d3ae94975c3f6df0da7524356e6802deb3d296746f2461985d61f7f3dc1f3bf"
+    },
+    {
+      "id": 9,
+      "sha256": "c6f1cab7c46b199d93e42578f6bfb5da8e502f5e1c9dbd58545363dce653a079"
+    },
+    {
+      "id": 10,
+      "sha256": "07f96be8ee0e5bfeacc43648fb9d0a1016fe18d060fffa7fb0facb1f97e8d3b3"
+    },
+    {
+      "id": 11,
+      "sha256": "48515353ab1f369ab6e93e97a064a7895305e347ac6c52a2ea500263d1a986f4"
+    }
+  ],
+  "frozen_at": "2026-11-03T03:22:23Z",
+  "git_head": "7e8588f9be9312415b67492c24dba5d0d824d064",
+  "spec_sha256": "5d4a8f5298b781757cefd2d150ce5eb30cd49a99fafd9742939906c2ec6a946f",
+  "version": 1
+}
