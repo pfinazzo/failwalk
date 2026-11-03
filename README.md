@@ -1,12 +1,111 @@
 # failwalk
 
-Failure-mode coverage for dependency calls.
+Failwalk tells you which of your vendor and database calls survive a failure, and which ones nobody has ever tested failing.
+
+![The map after a run on the sample app. The middle is the board: one row of six coloured cells per call site, under the file it is in, with the failure modes as columns. The lit row is billing.invoices.list in controllers/invoices.js, red under timeout and green under the other five modes, with two blue beams from the tests that reach it. The panel on the right names the call site, lists those two tests, and gives the verdict under each failure mode with a sentence on what goes wrong in production. The bar at the bottom is the walkthrough, on gap 1 of 12, with Back and Next.](docs/failwalk-ui.jpg)
+
+## Install
+
+Node 20 or newer. The repo is private, so your machine needs GitHub access to it.
+
+Run it without installing. Wherever this page says `failwalk`, type this instead:
+
+```bash
+npx github:pfinazzo/failwalk
+```
+
+Or install the `failwalk` command once. npm builds the package while it packs it. Then the tarball is installed:
+
+```bash
+npm pack github:pfinazzo/failwalk
+```
+
+```bash
+npm install -g ./failwalk-0.1.0.tgz
+```
+
+`npm install -g github:pfinazzo/failwalk` in one step does not work. npm runs the package's build inside the global install, and its two installs collide. npm 10 and 11 both do this, so the tarball step stays until npm fixes it.
+
+## Run it on your repo
+
+From the root of a project with a Jest suite:
+
+```bash
+failwalk init
+```
+
+This writes two files and ignores two more:
+
+- `failwalk.config.json`: the glob of your wrapper modules. Init picks the first of these folders that exists: `config`, `src/config`, `lib/config`, `clients`, `src/clients`, `services`, `src/services`, `wrappers`, `src/wrappers`. If yours live elsewhere, say so: `failwalk init --wrappers "lib/vendors/**/*.ts"`.
+- `jest.failwalk.config.js`: your own Jest config with failwalk's tracer added. Your config is not touched.
+- `.failwalk/` and `failwalk-ui.html` are added to `.gitignore`. Init will not replace a file it already wrote unless you pass `--force`.
+
+```bash
+failwalk
+```
+
+This runs your suite once to see which tests reach which call, then once more per call site and failure mode with that one failure injected. The last line is the headline. The map opens in your browser.
+
+What appears:
+
+- `.failwalk/`: `failwalk.json`, the full report, with the inventory, the trace and the plan beside it, and one folder per cell.
+- `failwalk-ui.html`: the map. The data is inside the page, so the one file can be sent to anyone.
+
+The worked example is the sample app in this repo, a small Express service with three wrapper modules and 14 tests. Its files are already committed, hence `--force`:
+
+```bash
+cd examples/sample-api
+```
+
+```bash
+failwalk init --force
+```
+
+```bash
+failwalk
+```
+
+```
+wrappers: config/**/*.{js,ts} (config is the first folder of config, src/config, lib/config, clients, src/clients, services, src/services, wrappers, src/wrappers that exists here; pass --wrappers to choose another)
+wrote failwalk.config.json
+wrote jest.failwalk.config.js (loads jest.config.js)
+.gitignore already lists .failwalk/ and failwalk-ui.html
+Next: run failwalk
+```
+
+```
+failwalk: 15 call sites, 6 modes, 90 cells. 43 covered (48%). 6 CRASH, 10 HANG, 39 FAIL, 13 RISK, 18 UNREACHED.
+```
+
+On this laptop that run takes about 40 seconds. Most of it is the `timeout` column: each of those cells waits for the ten-second per-test limit.
+
+## Read the map
+
+Each wrapper module is a group. Each call into it is a row of cells, one per failure mode: `timeout`, `dropped`, `500`, `429`, `malformed`, `partial`. The colour of a cell says what happened when that one failure was injected at that one line.
+
+- **Green: the code coped.** The tests passed, or a test noticed the failure and asserted on what the code did. Nothing to do.
+- **Red: nothing caught it.** The injected error escaped, or the test waited until its own timeout. Click the cell: the panel names the file and line. Add a timeout or a catch there, and a test that asserts on the failure path.
+- **Amber: the tests passed, but a check found a risk.** A retried write with no idempotency key, a call with no timeout, a catch that swallows the error, a retry with no wait between attempts, or a promise nobody awaits. Fix the pattern, or write the test that would have failed.
+- **Grey: nobody walked it.** No test reaches that call, so no failure was ever injected there. Write a test that reaches the line, then run `failwalk` again.
+
+Choose "Walk through everything" and the map takes you to each red, amber and grey cell in turn, says in plain words what goes wrong in production if that failure hits today, and shows the tests that reach it. Open the map after a later run and it starts with the gaps that closed.
+
+## Use it in CI
+
+```bash
+failwalk --no-open --min-coverage 0.6
+```
+
+`--no-open` writes the map without opening it. `--min-coverage` is a fraction from 0 to 1: failwalk exits 1 when fewer than that fraction of cells are green. Red cells alone never fail the run; the number does. Keep `failwalk-ui.html` as a build artifact so anyone can open the map for that run. `--concurrency` and `--test-timeout-ms` tune the run, and `--wrappers` overrides the config for one run.
+
+<details>
+<summary>How it works</summary>
 
 Line coverage says your code called the billing vendor. It says nothing about what the code does when that call fails. Failwalk finds every place your code calls a vendor or database through a wrapper module, records which tests reach each place, then runs those tests with one failure injected at a time and reports what happened.
 
 This is v1, steps 1 to 7 of the build order in [SPEC.md](SPEC.md): the inventory, the tracer, the failure-mode table, the grid of every call site against every failure mode, filled by one command, the five static checks that turn a PASS into a RISK, the map, and the proof that plants three known bugs and shows failwalk finds each one.
 
-## What is here
+### What is here
 
 | Piece | What it does |
 | --- | --- |
@@ -24,7 +123,7 @@ This is v1, steps 1 to 7 of the build order in [SPEC.md](SPEC.md): the inventory
 
 Failwalk runs inside your test suite. It never touches a deployed environment.
 
-## Install
+### Building from source
 
 Node 20 or newer. Developed on Node 24.
 
@@ -46,7 +145,7 @@ node dist/cli.js run --root examples/sample-api --wrappers "config/**/*.js"
 
 The steps below show what each stage does on its own.
 
-## Step 1: inventory
+### Step 1: inventory
 
 Point it at a project root and a glob for the wrapper modules. Every call through one of those modules becomes a record. Test files are left out: a test calling a wrapper is not a call site that needs protecting.
 
@@ -109,23 +208,29 @@ How each field is found:
 
 The inventory understands `require`, destructured `require`, `require(...).member`, and ES module imports in every form: default, named, renamed and namespace. A local name that shadows an import is not counted.
 
-## Step 2: trace
+### Step 2: trace
 
-The tracer is a Jest setup file. Add it through a config override, so the project's own config stays untouched. The sample app's override is [examples/sample-api/jest.failwalk.config.js](examples/sample-api/jest.failwalk.config.js):
+The tracer is a Jest setup file. Add it through a config override, so the project's own config stays untouched. `failwalk init` writes the override. The sample app's is [examples/sample-api/jest.failwalk.config.js](examples/sample-api/jest.failwalk.config.js):
 
 ```js
-const path = require("node:path");
-const base = require("./jest.config");
+const base = require("./jest.config.js");
 
-const setupFile = process.env.FAILWALK_SETUP || path.resolve(__dirname, "../../dist/tracer/setup.js");
+const setupFile = () => {
+  if (process.env.FAILWALK_SETUP) return process.env.FAILWALK_SETUP;
+  try {
+    return require.resolve("failwalk/dist/tracer/setup.js");
+  } catch (error) {
+    throw new Error("failwalk: cannot find the setup file. Run the suite through `failwalk`, or install failwalk in this project.", { cause: error });
+  }
+};
 
-module.exports = { ...base, setupFilesAfterEnv: [...(base.setupFilesAfterEnv || []), setupFile] };
+module.exports = { ...base, setupFilesAfterEnv: [...(base.setupFilesAfterEnv || []), setupFile()] };
 ```
 
-Run the suite with that config from the folder that holds `failwalk-inventory.json`:
+The setup file's path is found when Jest loads the override. The `failwalk` command sets `FAILWALK_SETUP` for every run it starts. Without it, the override asks for the failwalk package installed in the project. Run the suite with that config from the folder that holds `failwalk-inventory.json`:
 
 ```bash
-npx jest --config examples/sample-api/jest.failwalk.config.js
+FAILWALK_SETUP="$(node dist/cli.js setup-path)" npx jest --config examples/sample-api/jest.failwalk.config.js
 ```
 
 ```
@@ -196,7 +301,7 @@ Reading this:
 
 How matching works: every wrapped method captures a stack trace when called. The first frame outside `node_modules`, outside the tracer, and outside the wrapper files is the caller. Its file and line, after Jest's source-map resolution, are looked up in the inventory. On a line with several sites, the one with the same wrapper and method wins.
 
-## Step 3: one injected failure
+### Step 3: one injected failure
 
 Pick a reached call site and set two environment variables: the site id and a mode from the table in step 4. The tracer makes that one site fail the way the mode says. The same wrapper method called from any other line keeps running for real. This section uses `500`, which rejects with a vendor-shaped 500 error.
 
@@ -223,7 +328,7 @@ Tests:       4 passed, 4 total
 The same tests with the 500 injected at that site:
 
 ```bash
-FAILWALK_SITE="database.update@controllers/subscriptions.js:51" FAILWALK_MODE=500 npx jest --config examples/sample-api/jest.failwalk.config.js subscriptions
+FAILWALK_SITE="database.update@controllers/subscriptions.js:51" FAILWALK_MODE=500 FAILWALK_SETUP="$(node dist/cli.js setup-path)" npx jest --config examples/sample-api/jest.failwalk.config.js subscriptions
 ```
 
 ```
@@ -256,7 +361,7 @@ This is a CRASH, not a FAIL. No assertion failed. The route answered 200 and the
 For contrast, the same mode at line 33, the billing cancel inside a `try/catch`:
 
 ```bash
-FAILWALK_SITE="billing.subscriptions.cancel@controllers/subscriptions.js:33" FAILWALK_MODE=500 npx jest --config examples/sample-api/jest.failwalk.config.js subscriptions
+FAILWALK_SITE="billing.subscriptions.cancel@controllers/subscriptions.js:33" FAILWALK_MODE=500 FAILWALK_SETUP="$(node dist/cli.js setup-path)" npx jest --config examples/sample-api/jest.failwalk.config.js subscriptions
 ```
 
 ```
@@ -276,9 +381,9 @@ A FAIL is the good outcome. The code noticed the vendor failure, marked the reco
 
 One more contrast, at line 18 inside the retry loop of `listInvoices`: the injection fires on every attempt, three per test, six in all, and the route answers 502. Step 4 does this classification for every site and every mode.
 
-## Step 4: the grid
+### Step 4: the grid
 
-### The mode table
+#### The mode table
 
 Each mode is one row in [src/tracer/modes.ts](src/tracer/modes.ts), keyed by name. A row says what the injected call does instead of reaching the vendor. `FAILWALK_MODE` accepts every row.
 
@@ -293,7 +398,7 @@ Each mode is one row in [src/tracer/modes.ts](src/tracer/modes.ts), keyed by nam
 
 The spec's `duplicate` mode is for inbound webhooks and is v2 work.
 
-### The plan
+#### The plan
 
 The plan is a pure function from the inventory and the trace: one cell per (call site, mode). A cell lists the tests that reached its site in the baseline. Those are the only tests the injection run needs. A site no test reached gets an empty list and the verdict `UNREACHED`, and nothing runs for it. That is what keeps a run short.
 
@@ -330,7 +435,7 @@ failwalk plan: 90 cells (12 reached sites × 6 modes). 72 to run, 18 UNREACHED.
 
 The plan command checks that the inventory in the current folder was made for `--root`, so a stale inventory from another project cannot be planned by mistake.
 
-### The run
+#### The run
 
 ```bash
 node dist/cli.js run --root examples/sample-api --wrappers "config/**/*.js"
@@ -418,7 +523,7 @@ failwalk: 10 call sites, 6 modes, 60 cells. 33 covered (55%). 3 CRASH, 6 HANG, 2
 
 Cells are grouped by wrapper. Inside a wrapper, CRASH rows come first, then HANG, RISK (from step 5), FAIL, PASS and UNREACHED. Each row names the verdict, the mode, the site id, how many times the injection fired, and the first line of the first failure.
 
-### The verdicts
+#### The verdicts
 
 One lookup table in [src/verdicts.ts](src/verdicts.ts) turns what a runner process did into a verdict. The rows are tested in order and the first match wins.
 
@@ -441,7 +546,7 @@ Reading the sample grid:
 
 The sample app gained one call site for this step, `billing.subscriptions.create` in [examples/sample-api/controllers/signups.js](examples/sample-api/controllers/signups.js): an awaited vendor call whose test asserts on the answer, so it is HANG under `timeout` and FAIL under `malformed`.
 
-### Exit code
+#### Exit code
 
 `failwalk run` exits 1 when the covered fraction is below `--min-coverage`, a number from 0 to 1 that defaults to 0. Covered means PASS or FAIL. CRASH cells alone never fail the run; the number does.
 
@@ -451,7 +556,7 @@ node dist/cli.js run --root examples/sample-api --wrappers "config/**/*.js" --mi
 
 exits 1 on the grid above, since 33 of 60 is 55%. It exits 1 on the current grid in step 5 too: 43 of 90 is 48%, because RISK cells are not covered.
 
-### `failwalk.json`
+#### `failwalk.json`
 
 The source of truth for a run. It holds the inventory, the merged trace, the plan, and every cell with its verdict, the tests it ran, and what the runner did. The `timeout` cell for the signup call:
 
@@ -481,11 +586,11 @@ The source of truth for a run. It holds the inventory, the merged trace, the pla
 
 `failwalk-inventory.json`, `failwalk-trace.json` and `failwalk-plan.json` are written beside it, and every runner process's JSON results and trace records stay under `.failwalk/`, one folder per cell, for reading after the run.
 
-## Step 5: RISK
+### Step 5: RISK
 
 A PASS says the tests passed with the failure injected. It does not say the code handled the failure. The test may never look at the thing that broke. Five static checks read the code around each call site while the inventory is built. When a check fires on a site, every PASS cell of that site becomes RISK, and the cell names the checks.
 
-### The check table
+#### The check table
 
 One lookup table in [src/inventory/staticChecks.ts](src/inventory/staticChecks.ts), keyed by name. Each row is a sentence on what it finds and a pure function from the call and its surroundings to true or false. Adding a check means adding a row.
 
@@ -499,7 +604,7 @@ One lookup table in [src/inventory/staticChecks.ts](src/inventory/staticChecks.t
 
 "Inside a retry" means one of two shapes: the body of a `for`, `while` or `do` loop that contains a `try`/`catch`, or a callback passed to a call named `retry`, `pRetry`, `withRetry` or `retryAsync`. A third shape, a function that calls itself from inside its own `catch`, is not judged. Every call site in such a function gets `retry-shape-unknown` in its `notes`, so the report can say the shape was seen.
 
-### In the inventory
+#### In the inventory
 
 `failwalk inventory` adds one line per fired check to its summary: the check name, then the site id.
 
@@ -527,11 +632,11 @@ written to /Users/patrickfinazzo/Desktop/dependency-failure-coverage/failwalk-in
 
 Nine checks fire on eight sites. Five of those sites were added for this step, one per check, each in its own controller named for the pattern. The other three were there already: the retry loop in `listInvoices` has no wait between attempts and its `catch` only stores the error, the write in `recordView` was never awaited, and the receipt route's mailer call has no time limit. The mailer wrapper has none at all, so both calls into it fire `no-timeout`. The billing and database wrappers set one limit for every method at module level, so none of their calls do.
 
-### The verdict
+#### The verdict
 
 One row joins the verdict table in [src/verdicts.ts](src/verdicts.ts), after FAIL and before PASS: a cell whose tests all passed, and whose site has at least one fired check, is RISK. CRASH, HANG and FAIL are decided first, so a check never hides a failure the tests caught. RISK is not counted as covered. The tests passed, but the pattern the check found is what they did not test.
 
-### The grid
+#### The grid
 
 ```bash
 node dist/cli.js run --root examples/sample-api --wrappers "config/**/*.js"
@@ -665,7 +770,7 @@ Reading them:
 - **`retryWithoutBackoff.js:20` and `noTimeout.js:15`** fire a check but have no RISK cell. Their tests read the response body, so every injected failure is a FAIL or a HANG. The check still shows in the inventory lines above, and a cell of theirs that passes some day will be RISK, not PASS.
 - **`invoices.js:18`** fires two checks and is FAIL or HANG in every mode. The tests there assert on the invoices, so they catch every injection.
 
-### What goes wrong in production
+#### What goes wrong in production
 
 **`retry-without-idempotency-key`.** A write that is retried without an idempotency key can land twice. The first attempt reaches the vendor and the vendor does the work. The answer is lost on the way back, because the connection dropped or the request timed out. The code sees a failure and tries again. The vendor sees a new request and does the work again. For a charge, the customer pays twice. For a subscription, they get two. An idempotency key tells the vendor the second request is the first one repeated, and the vendor answers from the first.
 
@@ -677,7 +782,7 @@ Reading them:
 
 **`unawaited-call`.** A promise nobody holds has nowhere to report. If the call fails, the error is an unhandled rejection: at best a log line, at worst the process exits. If the call never settles, nothing notices. The response already said "recorded", so the caller moves on. The view, the login or the audit entry that was meant to be written is not there, and no test can see that it is missing, because the test is looking at the response.
 
-### The five sample sites
+#### The five sample sites
 
 | Check | Controller | Route | Test |
 | --- | --- | --- | --- |
@@ -689,14 +794,14 @@ Reading them:
 
 For this step the billing and database wrappers gained a time limit, set once at module level and given to every method through [examples/sample-api/lib/withTimeout.js](examples/sample-api/lib/withTimeout.js). The mailer wrapper did not. Without that, `no-timeout` would fire on all fifteen sites, which is the honest state of most codebases on day one but says nothing about any one site.
 
-### Limits of the checks
+#### Limits of the checks
 
 - A function that retries by calling itself from its `catch` is reported as a note, not judged.
 - A retry helper that waits on its own, as some libraries do by default, still fires `retry-without-backoff`, because the callback awaits no wait.
 - A time limit set outside the wrapper module, on a shared HTTP client for example, is not seen. The check reads the wrapper's source and the call's arguments, nothing else.
 - The checks are AST patterns. They are cheap and deterministic, and they are the part an LLM could do better by reading the function and saying "retries without a key" in prose. That is v2, behind a flag.
 
-## The map
+### The map
 
 `failwalk ui` draws the grid as a picture and opens it in the browser.
 
@@ -736,11 +841,11 @@ Before a run, the page still works. With an inventory but no trace, every cell i
 
 The look and the walkthrough follow the system map pages built with the same family of tools, so the two read as one. [docs/decisions.md](docs/decisions.md) says why the map is one file and why rows are call sites.
 
-## Step 7: the proof
+### Step 7: the proof
 
 Three known bugs are planted in the sample app, one at a time, and failwalk must find each one. `npm run prove` runs the proof alone. `npm test` includes it.
 
-### The seeds
+#### The seeds
 
 One lookup table in [tests/proof/seeds.ts](tests/proof/seeds.ts), keyed by seed name. Each row names one sample-app file that is clean of its pattern, the exact text to replace, the text that plants the bug, and the finding failwalk must then report: a call-site id and a check name. [src/proof/applySeed.ts](src/proof/applySeed.ts) makes the edit on a string and throws when the `before` text is not found exactly once.
 
@@ -830,7 +935,7 @@ The cells it produced in a real run:
   RISK      partial   database.update@controllers/subscriptions.js:14   fired 1; checks: no-timeout
 ```
 
-### How the proof runs
+#### How the proof runs
 
 [tests/proof/seeded.test.ts](tests/proof/seeded.test.ts) does four walks, all at once, each on its own copy of `examples/sample-api` in a fresh folder under the OS temp directory with the repo's `node_modules` linked in. The first copy is unseeded. For each of the three target sites it asserts the site is in the inventory, its checks do not include the seed's check, and no cell of it is RISK or CRASH. Each other copy gets one seed. The proof then reads that walk's `failwalk.json` and asserts a RISK cell at the seed's site names the seed's check, and that the site's checks grew by exactly that one name. The copies are deleted when the proof ends, and the files under `examples/sample-api` are checked afterwards to be unchanged.
 
@@ -857,15 +962,15 @@ The real last lines of `npm run prove`, on this laptop:
    Duration  23.17s (tests 100%)
 ```
 
-### Why the proof exists
+#### Why the proof exists
 
 The headline says 43 of 90 cells are covered. That number came from a tool reading its own output, and nobody had put a bug in front of the tool to see whether it noticed. A coverage number nobody has checked against a known bug is a guess. The proof plants three bugs that failwalk's own checks are built to find, in places that were clean, and shows that the number moves for each one. If a later change to a check or to the tracer stops one of them being found, `npm test` says so before anyone trusts the number again.
 
-## Using it on your own project
+### Using the pieces by hand
 
 1. Build failwalk: `npm install && npm run build`.
 2. From a folder of your choice, run the inventory with `--root <your project>` and `--wrappers <glob of your wrapper modules>`. The output file `failwalk-inventory.json` lands in the current folder.
-3. Add a Jest config override next to your project's config that appends the setup file to `setupFilesAfterEnv`. `node dist/cli.js setup-path` prints the file's path.
+3. Add a Jest config override next to your project's config that appends the setup file to `setupFilesAfterEnv`. `failwalk init` writes one; `node dist/cli.js setup-path` prints the file's path for a hand-written one.
 4. Run your suite with that override from the same folder as the inventory file, or set `FAILWALK_INVENTORY` to its path. The tracer writes to `.failwalk/trace/` beside the inventory file, or to `FAILWALK_TRACE_DIR`. Your project's folder is never written to.
 5. Run `node dist/cli.js trace`, then `node dist/cli.js plan --root <your project>`.
 6. To inject one cell by hand, set `FAILWALK_SITE` to an id from the inventory and `FAILWALK_MODE` to a mode, and run only the tests that reached that site.
@@ -873,7 +978,7 @@ The headline says 43 of 90 cells are covered. That number came from a tool readi
 
 If a test mocks the whole wrapper with `jest.mock`, the mock replaces the tracer's wrapped module for that test file. The real method is never entered, so nothing is recorded and nothing is injected. The spec calls that cell MOCKED; detecting it is later work.
 
-## Limits of v1
+### Limits of v1
 
 - Jest only. The setup file uses `jest.doMock`, `expect.getState()` and `afterAll`. Under `setupFiles` instead of `setupFilesAfterEnv`, test names are unavailable and the record is written when the worker exits.
 - The `duplicate` mode from the spec, replaying an inbound webhook twice, is v2 work. The `MOCKED` verdict is a later step.
@@ -882,12 +987,14 @@ If a test mocks the whole wrapper with `jest.mock`, the mock replaces the tracer
 - Wrapper exports are wrapped four member levels deep. A property that is both non-writable and non-configurable is left alone, because a Proxy must return it unchanged.
 - The inventory sees calls whose callee is an import or a member chain on one. A wrapper method passed around as a value and called later is reported by the tracer as UNINVENTORIED at the line that called it.
 
-## Development
+### Development
 
 ```bash
 npm test
 ```
 
-That builds, runs 126 tests against `examples/sample-api`, a small ES-module fixture and a fixture of static-check cases, including one full `failwalk run`, the shaping of the map and the seeded-bug proof, then runs the sample app's own 14 tests. On this laptop the whole of `npm test` takes 35 seconds. `npm run prove` runs the proof alone.
+That builds, runs 143 tests against `examples/sample-api`, a small ES-module fixture and a fixture of static-check cases, including one full `failwalk run`, `failwalk init` on temp projects, the bare command on a copy of the sample app, the shaping of the map and the seeded-bug proof, then runs the sample app's own 14 tests. On this laptop the whole of `npm test` takes 41 seconds. `npm run prove` runs the proof alone.
 
-This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-static-checks` for step 5, `v1-ui` for the map, `v1-seeded-proof` for step 7.
+This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-static-checks` for step 5, `v1-ui` for the map, `v1-seeded-proof` for step 7, `v1-simple-run` for `failwalk init`, the bare command and this README.
+
+</details>

@@ -1,0 +1,164 @@
+# claimcheck claims file for failwalk v1-simple-run: `failwalk init`, the bare `failwalk` command, the install path and
+# the README about running it. One entry per thing the author asserts about this diff. The diff is against main.
+# Product-code files in the diff: src/cli.ts, src/index.ts, src/version.ts, src/init/*.ts, src/run/simpleRun.ts,
+# src/run/runCommand.ts, package.json, scripts/prepare.js, examples/sample-api/{jest.failwalk.config.js,failwalk.config.json,package.json,.gitignore}.
+version: 1
+author: "claude-code/claude-fable-5-1"
+base: "main"
+claims:
+  - id: c1
+    claim: "src/init/wrapperFolders.ts exports WRAPPER_FOLDERS as exactly config, src/config, lib/config, clients, src/clients, services, src/services, wrappers, src/wrappers in that order, and pickWrapperFolder({ root }) returns the first of them that is a directory under root with the glob `<folder>/**/*.{js,ts}`, or null when none is; initProject uses it only when --wrappers was not given, and its first printed line names the folder and says it is the first folder of the list that exists here"
+    confidence: 0.95
+    criteria: [1]
+    files: ["src/init/wrapperFolders.ts", "src/init/initProject.ts"]
+    kill_condition: "test: tests/init.test.ts::takes the first folder of the lookup list that exists, and prints which one and why"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+      - "obs: in examples/sample-api, init printed `wrappers: config/**/*.{js,ts} (config is the first folder of config, src/config, ... that exists here; pass --wrappers to choose another)`"
+
+  - id: c2
+    claim: "When --wrappers is not given and no folder of WRAPPER_FOLDERS exists under the root, `failwalk init` exits 1 with one stderr line that starts `failwalk: no wrapper folder found in <root>`, lists the folders it looked for, and ends `Pass --wrappers <glob> to say where your wrapper modules are.`, and neither failwalk.config.json nor jest.failwalk.config.js is written"
+    confidence: 0.95
+    criteria: [1]
+    files: ["src/init/initProject.ts", "src/cli.ts"]
+    kill_condition: "test: tests/init.test.ts::exits 1 naming --wrappers when no folder of the list exists, and writes nothing"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+
+  - id: c3
+    claim: "`failwalk init` writes failwalk.config.json as a two-key JSON object { wrappers: <glob>, jestConfig: \"jest.failwalk.config.js\" } with two-space indentation and a trailing newline, and readConfig({ root }) in src/init/config.ts returns that object or null when the file is missing"
+    confidence: 0.96
+    criteria: [1, 4]
+    files: ["src/init/config.ts", "src/init/initProject.ts"]
+    kill_condition: "test: tests/init.test.ts::--wrappers wins over the lookup"
+    verified_by:
+      - "cmd: cat examples/sample-api/failwalk.config.json"
+
+  - id: c4
+    claim: "findJestBase({ root }) in src/init/jestOverride.ts returns { kind: 'file', file } for the first of jest.config.js, jest.config.cjs, jest.config.mjs that exists, else { kind: 'package' } when package.json has a `jest` field, else { kind: 'none' }; renderJestOverride writes `const base = require(\"./<file>\")` (with `.default` for .mjs) or `require(\"./package.json\").jest`, and exports `{ ...base, setupFilesAfterEnv: [...(base.setupFilesAfterEnv || []), setupFile()] }`, or `{ setupFilesAfterEnv: [setupFile()] }` for 'none'; loading each written override under Node with FAILWALK_SETUP set gives exactly those objects"
+    confidence: 0.94
+    criteria: [2]
+    files: ["src/init/jestOverride.ts"]
+    kill_condition: "test: tests/init.test.ts::with jest.config.js: loads it and appends the setup file to setupFilesAfterEnv"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts (the three base kinds and the cjs/mjs lines)"
+
+  - id: c5
+    claim: "The override's setupFile() reads process.env.FAILWALK_SETUP first, else require.resolve(\"failwalk/dist/tracer/setup.js\"), else throws an Error naming failwalk; the text contains no absolute path and no __dirname; runnerEnv (unchanged) sets FAILWALK_SETUP to the built setup file for the baseline and every cell, which is how the bare command and `failwalk run` reach the setup file from a global or npx install"
+    confidence: 0.93
+    criteria: [2]
+    files: ["src/init/jestOverride.ts", "examples/sample-api/jest.failwalk.config.js"]
+    kill_condition: "test: tests/init.test.ts::the setup file is resolved when Jest loads the override: from FAILWALK_SETUP, else from the installed package, never a fixed path"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+      - "obs: `failwalk --no-open` from a globally installed copy ran the sample app's 72 cells with the override written by init"
+
+  - id: c6
+    claim: "addGitignoreLines in src/init/gitignore.ts creates .gitignore with `.failwalk/` and `failwalk-ui.html` when it is missing, appends only the lines not already present (compared after trimming) to an existing file, adding a newline first when the file does not end with one, and returns the added lines; a second init prints `.gitignore already lists .failwalk/ and failwalk-ui.html` and changes nothing"
+    confidence: 0.95
+    criteria: [3]
+    files: ["src/init/gitignore.ts", "src/init/initProject.ts"]
+    kill_condition: "test: tests/init.test.ts::appends to an existing .gitignore, keeping its lines, and a second init adds nothing"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+
+  - id: c7
+    claim: "Without --force, `failwalk init` exits 1 before writing anything when failwalk.config.json or jest.failwalk.config.js exists, with a message naming each existing file and saying `--force replaces it` (one file) or `--force replaces them` (both); with --force both files are rewritten"
+    confidence: 0.95
+    criteria: [3]
+    files: ["src/init/initProject.ts"]
+    kill_condition: "test: tests/init.test.ts::a second init exits 1 naming the files that exist and --force, leaving them as they were"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+
+  - id: c8
+    claim: "The bare `failwalk` command (runSimple in src/run/simpleRun.ts, the root action in src/cli.ts) reads failwalk.config.json from --root (default .), calls runWalk with outDir and workDir both set to <root>/.failwalk so failwalk-inventory.json, failwalk-trace.json, failwalk-plan.json, failwalk.json, baseline/ and cells/ all land under .failwalk/, writes <root>/failwalk-ui.html from loadScene and renderPage, opens it through openInBrowser unless --no-open, prints `map: <path>` to stderr and the headline as the last stdout line, and sets process.exitCode from exitCodeFor, so --min-coverage behaves as in `failwalk run`; --wrappers, --concurrency and --test-timeout-ms override the config"
+    confidence: 0.93
+    criteria: [4]
+    files: ["src/run/simpleRun.ts", "src/cli.ts", "src/run/runCommand.ts"]
+    kill_condition: "test: tests/init.test.ts::runs the whole grid, writes every file under .failwalk/, the page in the root, and the headline last"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+      - "obs: `node dist/cli.js --no-open --test-timeout-ms 2000` in examples/sample-api printed the 90-cell headline, listed baseline, cells and the four JSON files under .failwalk, and wrote failwalk-ui.html (104 KB)"
+
+  - id: c9
+    claim: "Without failwalk.config.json the bare command exits 1 and prints exactly one stderr line, `failwalk: no failwalk.config.json in <root>. Run \"failwalk init\" first.`, and nothing on stdout; the message is thrown by runSimple and printed by the CLI's one catch"
+    confidence: 0.96
+    criteria: [4]
+    files: ["src/run/simpleRun.ts", "src/cli.ts"]
+    kill_condition: "test: tests/init.test.ts::exits 1 with one line saying to run failwalk init when there is no failwalk.config.json"
+    verified_by:
+      - "cmd: cd /tmp && node <repo>/dist/cli.js --no-open; echo $? (one line, exit 1)"
+
+  - id: c10
+    claim: "RunOptions gains an optional workDir, resolved as `path.resolve(workDir ?? path.join(absoluteOut, \".failwalk\"))`, and nothing else in runWalk changed, so `failwalk run`, `inventory`, `trace`, `plan`, `ui` and `setup-path` behave as on main; the program calls enablePositionalOptions() so the root command's --root and --wrappers do not capture the same-named options of `init` and `inventory`; the existing tests in tests/run.test.ts, tests/ui.test.ts and tests/proof pass unchanged"
+    confidence: 0.94
+    criteria: [5]
+    files: ["src/run/runCommand.ts", "src/cli.ts"]
+    kill_condition: "cmd: npm test (tests/run.test.ts and tests/proof/seeded.test.ts pass)"
+    verified_by:
+      - "cmd: npm test (143 vitest tests in 13 files, 14 sample tests, exit 0)"
+      - "cmd: node dist/cli.js inventory --root examples/sample-api --wrappers 'config/**/*.js' --out /dev/null (15 call sites)"
+
+  - id: c11
+    claim: "package.json gains the script `prepare`: `node scripts/prepare.js`, keeps `files: [dist]` and `bin: { failwalk: dist/cli.js }`, and no other script changed; scripts/prepare.js runs `npm install --no-save --ignore-scripts --include=dev` in the repo root, with npm_config_global, npm_config_location and npm_config_prefix removed from the environment, only when typescript cannot be resolved from the root, then runs `npm run build`, because a global install from GitHub runs prepare in the clone before npm installs anything there; src/version.ts reads the version from the package.json one folder above dist, and the CLI passes readVersion() to commander, so `failwalk --version` prints 0.1.0; `npx github:pfinazzo/failwalk#v1-simple-run --version` prints 0.1.0, `npm install github:pfinazzo/failwalk#v1-simple-run` in a project installs a working `node_modules/failwalk/dist`, and `npm pack github:pfinazzo/failwalk#v1-simple-run` followed by `npm install -g ./failwalk-0.1.0.tgz` installs a working global `failwalk`; the one-step `npm install -g github:pfinazzo/failwalk#v1-simple-run` fails under npm 10.9.8 and 11.19.0 with ENOENT or ENOTDIR in the global folder, because npm's inner install for a git package with a prepare script inherits the global flag and reifies the clone into the same global folder as the outer install, so that part of criterion 6 is not met and the README says so"
+    confidence: 0.9
+    criteria: [6]
+    files: ["package.json", "scripts/prepare.js", "src/version.ts", "src/cli.ts"]
+    kill_condition: "cmd: npx -y github:pfinazzo/failwalk#v1-simple-run --version && npm pack github:pfinazzo/failwalk#v1-simple-run && npm install -g ./failwalk-0.1.0.tgz && failwalk --version (the claim dies if either --version prints anything but 0.1.0, or if the one-step `npm install -g github:pfinazzo/failwalk#v1-simple-run` exits 0 and installs a working failwalk on npm 10.9.8 or 11.19.0)"
+    verified_by:
+      - "test: tests/init.test.ts::--version prints the version from package.json"
+      - "cmd: npx -y github:pfinazzo/failwalk#v1-simple-run --version (0.1.0, 9 s)"
+      - "cmd: in a fresh clone without node_modules, npm_config_global=true node scripts/prepare.js installed the dev dependencies and built dist"
+      - "cmd: npm pack github:pfinazzo/failwalk#v1-simple-run && npm install -g ./failwalk-0.1.0.tgz && failwalk --version (0.1.0)"
+      - "cmd: npm install -g github:pfinazzo/failwalk#v1-simple-run (fails: ENOENT chmod under lib/node_modules/failwalk on npm 10.9.8 and 11.19.0; ENOTDIR rename on a retry)"
+      - "cmd: npm install github:pfinazzo/failwalk#v1-simple-run in a fresh project, then npx failwalk --version (0.1.0)"
+
+  - id: c12
+    claim: "examples/sample-api now holds failwalk.config.json and the jest.failwalk.config.js that `failwalk init --force` writes there, byte for byte, plus a .gitignore with the two lines; its `test:failwalk` script sets FAILWALK_SETUP=../../dist/tracer/setup.js because the repo has no node_modules/failwalk for the override's fallback; `failwalk init --force` then `failwalk --no-open` from that folder works and the headline is the same 90-cell line as on main (43 covered, 48%)"
+    confidence: 0.93
+    criteria: [7]
+    files: ["examples/sample-api/jest.failwalk.config.js", "examples/sample-api/failwalk.config.json", "examples/sample-api/package.json", "examples/sample-api/.gitignore"]
+    kill_condition: "test: tests/init.test.ts::init writes the same override and config the sample app has committed"
+    verified_by:
+      - "cmd: npx vitest run tests/init.test.ts"
+      - "obs: the bare run in examples/sample-api printed `failwalk: 15 call sites, 6 modes, 90 cells. 43 covered (48%). 6 CRASH, 10 HANG, 39 FAIL, 13 RISK, 18 UNREACHED.`"
+
+  - id: c13
+    claim: "README.md lines 1 to 100 are, in order: the title, one sentence on what failwalk tells you, the docs/failwalk-ui.jpg image with alt text describing the board, the lit row, the panel and the walkthrough bar, `## Install` with `Node 20 or newer`, the npx command, the pack and install -g commands, and the sentence saying the one-step global install fails in npm, `## Run it on your repo` with `failwalk init`, `failwalk`, the files that appear and the examples/sample-api flow with its real output, `## Read the map` with green, red, amber and grey each followed by what to do, and `## Use it in CI` with --no-open, --min-coverage and the exit code; `<details>` opens at line 101 with `<summary>How it works</summary>`, and no line before it mentions the mode table, the checks table, the verdict rules or the proof"
+    confidence: 0.92
+    criteria: [8]
+    files: ["README.md"]
+    kill_condition: "cmd: awk '/<details>/{print NR; exit}' README.md (at most 121) && sed -n 1,100p README.md | grep -ciE 'verdict table|mode table|seeds|SPEC.md' (0)"
+    verified_by:
+      - "cmd: awk '/<details>/{print NR; exit}' README.md (101)"
+      - "cmd: grep -n '^## ' README.md (Install, Run it on your repo, Read the map, Use it in CI, in that order)"
+
+  - id: c14
+    claim: "Every section of the README on main from its first prose paragraph to its end is inside the one `<details>` block, in the original order, with each heading demoted one level (## to ###, ### to ####) outside code fences; the only text changes inside are: `### Install` renamed `### Building from source`, `### Using it on your own project` renamed `### Using the pieces by hand`, in step 2 the lead sentence now saying `failwalk init` writes the override, the override block replaced by the override init now writes, and one new sentence after it on how the setup file's path is found (FAILWALK_SETUP, else the installed package), FAILWALK_SETUP added to the three by-hand jest commands, step 3 of the by-hand list naming `failwalk init`, and the Development counts (143 tests, 41 seconds, the v1-simple-run task); no section was deleted"
+    confidence: 0.9
+    criteria: [9]
+    files: ["README.md"]
+    kill_condition: "cmd: diff <(git show main:README.md | grep -E '^#{2,3} ' | sed 's/^/#/') <(sed -n '93,$p' README.md | grep -E '^#{3,4} ') (only the two renamed headings differ)"
+    verified_by:
+      - "obs: the body was produced by a script that demoted headings outside code fences and applied exactly those replacements, each asserted present first"
+
+  - id: c15
+    claim: "tests/init.test.ts covers init on temp projects with jest.config.js, with a package.json jest field and with neither, the folder lookup and its exit 1, the overwrite refusal and --force, the .gitignore lines added once, the bare command's exit 1 without config, --version, and init plus the bare command on a copy of the sample app that is first cleared of the init files, `.failwalk/` and `failwalk-ui.html`, asserting the four JSON files, `baseline/` and `cells/` under `.failwalk/`, no `failwalk.json` in the root, the stdout headline equal to the report's, 90 cells, and the page embedding that headline with status `run`; `npm test` on Node 24.21.0 exits 0 with 143 vitest tests in 13 files and the sample's 14 Jest tests in about 41 seconds, with the step 7 proof among them"
+    confidence: 0.93
+    criteria: [10]
+    files: ["tests/init.test.ts"]
+    kill_condition: "cmd: npm test (exit 0, 'Test Files  13 passed')"
+    verified_by:
+      - "cmd: time npm test (real 0m40.8s, 143 passed, exit 0)"
+
+  - id: c16
+    claim: "No file added or changed by this diff names, reads or depends on a real-world vendor, service or repository other than the install URL of this repo in README.md and package.json's own metadata; every new function in src/init, src/run/simpleRun.ts, src/version.ts, scripts/prepare.js and tests/init.test.ts is an arrow-function const with a doc block that takes one named-params object or none, the per-kind behaviour of the override lives in the BASE_LINE, EXPORT_LINE and BASE_DESCRIPTION lookup tables, and the source files under src and scripts have no class, no `this`, no `let`, no `else if`, no mutation of a parameter and no `await` inside a loop; tests/init.test.ts has exactly two `let` declarations, `copy` and `walk`, each assigned once in a beforeAll, the same shape as the existing tests/run.test.ts"
+    confidence: 0.93
+    criteria: [11]
+    files: ["src/init/config.ts", "src/init/wrapperFolders.ts", "src/init/jestOverride.ts", "src/init/gitignore.ts", "src/init/initProject.ts", "src/run/simpleRun.ts", "src/version.ts", "src/index.ts"]
+    kill_condition: "cmd: grep -nE 'class |this\\.|else if|for await|\\blet\\b' src/init/*.ts src/run/simpleRun.ts src/version.ts scripts/prepare.js (no matches) && grep -cE '^\\s*let ' tests/init.test.ts (2)"
+    verified_by:
+      - "cmd: grep -nE 'class |this\\.|else if|for await|\\blet\\b' src/init/*.ts src/run/simpleRun.ts src/version.ts scripts/prepare.js (no matches)"
+      - "cmd: grep -cE '^\\s*let ' tests/init.test.ts (2)"
+      - "cmd: grep -rniE 'chargebee|stripe|firebase|github.com' src/init src/run/simpleRun.ts src/version.ts tests/init.test.ts (no matches)"
