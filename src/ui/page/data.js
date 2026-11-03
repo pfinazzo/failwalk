@@ -88,8 +88,6 @@ const wrapperFiles = (name) => [...new Set(wrapperSites(name).map((s) => s.file)
 const stateCounts = (cells) => cells.reduce((acc, c) => ({ ...acc, [c.state]: (acc[c.state] || 0) + 1 }), {});
 const countsText = (cells) => STATE_ORDER.filter((s) => stateCounts(cells)[s]).map((s) => `${stateCounts(cells)[s]} ${STATE_NAMES[s].toLowerCase()}`).join(', ');
 const shortSite = (site) => `${site.wrapper}.${site.method} at ${site.file}:${site.line}`;
-/** A link that opens the file at its line in VS Code. The root is absolute, so the link works on the machine the run was made on. */
-const editorUrl = (site) => `vscode://file/${SCENE.root.replace(/\\/g, '/')}/${site.file}:${site.line}`;
 
 /* ------------------------------------------------------------------ */
 /* Layout: every wrapper is a block of rows; tests float behind.       */

@@ -270,15 +270,22 @@ const toWrappers = ({ sites, status }: { sites: readonly SceneSite[]; status: Sc
     return { name, sites: own.map(({ id }) => id), gaps, complete: status === "run" && gaps === 0 };
   });
 
+/** What the three files say about how far they got, tested in order: the first row whose condition holds names the status. */
+const STATUS_RULES: readonly { status: SceneStatus; when: (params: { trace: TraceSummary | null; report: Report | null }) => boolean }[] = [
+  { status: "run", when: ({ report }) => report !== null },
+  { status: "traced", when: ({ trace }) => trace !== null },
+  { status: "inventory-only", when: () => true },
+];
+
 /**
- * Says how far the files got. A report means a run; a trace alone means traced; the inventory alone is the start.
+ * Says how far the files got, from the rule table. A report means a run; a trace alone means traced; the inventory alone is the start.
  *
  * @param params.trace - the trace or null
  * @param params.report - the report or null
  * @returns the status
  */
 const statusOf = ({ trace, report }: { trace: TraceSummary | null; report: Report | null }): SceneStatus =>
-  report ? "run" : trace ? "traced" : "inventory-only";
+  (STATUS_RULES.find((rule) => rule.when({ trace, report })) as (typeof STATUS_RULES)[number]).status;
 
 /**
  * Shapes the three files into what the page draws. Pure.

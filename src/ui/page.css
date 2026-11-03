@@ -18,7 +18,7 @@
   --panel-w: 440px;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { font: inherit; color: inherit; }
@@ -35,7 +35,7 @@ button { font: inherit; color: inherit; }
 .tab:hover { color: var(--text); }
 .tab.on { background: rgba(125, 211, 252, 0.14); color: var(--text); box-shadow: inset 0 0 0 1px rgba(125,211,252,0.35); }
 .spacer { flex: 1; }
-.built { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.built { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1100px) { .built, .brand small { display: none; } }
 .iconbtn { border: 1px solid var(--line); background: rgba(148,163,184,0.06); border-radius: 10px; padding: 7px 11px; cursor: pointer; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .iconbtn:hover { color: var(--text); border-color: var(--line-strong); }
@@ -71,7 +71,7 @@ button { font: inherit; color: inherit; }
 .panel .body { overflow: auto; padding: 6px 20px 40px; flex: 1; }
 .panel h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); margin: 22px 0 10px; font-weight: 600; }
 .panel p { color: #cbd5e1; line-height: 1.6; font-size: 14px; margin: 0 0 10px; }
-.code { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 12.5px; background: rgba(148,163,184,0.1); border: 1px solid var(--line); padding: 2px 6px; border-radius: 6px; color: #e2e8f0; }
+.code { font-family: ui-monospace, monospace; font-size: 12.5px; background: rgba(148,163,184,0.1); border: 1px solid var(--line); padding: 2px 6px; border-radius: 6px; color: #e2e8f0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; gap: 7px; align-items: center; border: 1px solid var(--line); background: rgba(148,163,184,0.06); border-radius: 999px; padding: 5px 11px 5px 9px; font-size: 13px; cursor: pointer; color: var(--text); text-align: left; max-width: 100%; }
 .chip:hover { border-color: var(--line-strong); background: rgba(148,163,184,0.12); }
@@ -83,7 +83,7 @@ button { font: inherit; color: inherit; }
 .cellrow:hover { border-color: var(--line-strong); background: rgba(148,163,184,0.06); }
 .cellrow.on { border-color: rgba(125,211,252,0.6); background: rgba(125,211,252,0.08); }
 .cellrow .sq { width: 10px; height: 10px; border-radius: 3px; transform: translateY(1px); }
-.cellrow .mode { font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--text); }
+.cellrow .mode { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text); }
 .cellrow .note { font-size: 13px; color: var(--muted); line-height: 1.45; word-break: break-word; }
 .cellrow .note b { color: var(--text); font-weight: 600; }
 /* What goes wrong in production today if this failure hits, under the note. */
@@ -159,11 +159,11 @@ body.touring .legend, body.touring .hint { display: none; }
 .lab.wrapper.done { border-color: rgba(52,211,153,0.45); }
 .lab.wrapper.gappy { border-color: rgba(251,113,133,0.45); }
 .lab.site { right: 0; top: 0; transform: translate(-6px, -50%); text-align: right; }
-.lab.site .sub { display: block; font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 9.5px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+.lab.site .sub { display: block; font-family: ui-monospace, monospace; font-size: 9.5px; font-weight: 500; color: var(--muted); margin-top: 1px; }
 .lab.test { left: 0; top: 0; transform: translate(-50%, -100%) translateY(-8px); max-width: 180px; white-space: normal; text-align: center; font-size: 10.5px; font-weight: 500; color: #cbd5e1; }
 .lab.halo { pointer-events: none; background: none; border: 0; font-size: 10px; font-weight: 600; color: var(--faint); letter-spacing: 0.12em; text-transform: uppercase; }
-.lab.file { right: 0; top: 0; transform: translate(-6px, -50%); font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; letter-spacing: 0; text-transform: none; font-size: 10px; color: var(--muted); }
-.lab.mode { left: 0; bottom: 0; transform: translate(-4px, 0) rotate(-45deg); transform-origin: left bottom; font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; letter-spacing: 0; text-transform: none; font-size: 10.5px; color: var(--muted); }
+.lab.file { right: 0; top: 0; transform: translate(-6px, -50%); font-family: ui-monospace, monospace; letter-spacing: 0; text-transform: none; font-size: 10px; color: var(--muted); }
+.lab.mode { left: 0; bottom: 0; transform: translate(-4px, 0) rotate(-45deg); transform-origin: left bottom; font-family: ui-monospace, monospace; letter-spacing: 0; text-transform: none; font-size: 10.5px; color: var(--muted); }
 
 /* The greeting */
 /* The whole board stays visible behind the greeting, so the first thing on screen is every service at once. */

@@ -18,7 +18,7 @@ const serviceLine = (w) => (w.complete ? 'Complete: every call site walked under
 function showSite(id, mode = null) {
   const s = SITE[id];
   const tests = s.tests.length ? `<div class="chips">${s.tests.map(testChip).join('')}</div>` : `<p>No test reaches this call site. Nothing can be injected here until one does.</p>`;
-  $('#panelHead').innerHTML = `<button class="iconbtn close" id="closeP">✕</button><div class="kind"><span class="sw" style="background:${wrapperColor(s.wrapper)}"></span>Call site · ${esc(s.wrapper)}</div><h2>${esc(s.wrapper)}.${esc(s.method)}</h2><p class="simple"><a href="${esc(editorUrl(s))}" title="Open in VS Code"><span class="code">${esc(s.file)}:${s.line}</span></a> · a ${esc(s.kind)}${s.checks.length ? ` · ${plural(s.checks.length, 'check')} fired` : ''}</p>`;
+  $('#panelHead').innerHTML = `<button class="iconbtn close" id="closeP">✕</button><div class="kind"><span class="sw" style="background:${wrapperColor(s.wrapper)}"></span>Call site · ${esc(s.wrapper)}</div><h2>${esc(s.wrapper)}.${esc(s.method)}</h2><p class="simple"><span class="code">${esc(s.file)}:${s.line}</span> · a ${esc(s.kind)}${s.checks.length ? ` · ${plural(s.checks.length, 'check')} fired` : ''}</p>`;
   $('#panelBody').innerHTML = `${noticeBlock()}${s.checks.length ? `<h3>Static checks that fired</h3><div class="chips">${s.checks.map(checkChip).join('')}</div>` : ''}
     <h3>Tests that reach it</h3>${tests}
     <h3>Each failure mode</h3>${s.cells.map((c) => cellRow(s, c, c.mode === mode)).join('')}`;
