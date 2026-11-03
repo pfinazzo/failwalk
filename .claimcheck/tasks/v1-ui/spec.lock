@@ -1,0 +1,60 @@
+{
+  "criteria": [
+    {
+      "id": 1,
+      "sha256": "c5d779204b4dc8a7b137af24a5c92d31eb326eb8b70bd7c15c1d6e69598e531a"
+    },
+    {
+      "id": 2,
+      "sha256": "32c12f121d522aaaf27701f7befa0cbf5125f8dd9763ff79f672b2148f89894f"
+    },
+    {
+      "id": 3,
+      "sha256": "a878f8476a177d242785fb0ce93f77a0def7ee84a0e664d598f240734d4578b5"
+    },
+    {
+      "id": 4,
+      "sha256": "ac3fac234fc7b01fcad29ff7beafe016cde53090433364d8cfacb832fa63d3ea"
+    },
+    {
+      "id": 5,
+      "sha256": "13472671973a98f3b468b56b8b35871675bde4040d2cf79ad78fa31eb65d0cea"
+    },
+    {
+      "id": 6,
+      "sha256": "c8e6fa4fd782553c2e2721a83b27e7937ce3361ec475afced1cfc1bfa2dfb21e"
+    },
+    {
+      "id": 7,
+      "sha256": "0ebaa94149f619b99a269fffe435fb34aa6c23f956ee3036f3b85ec51e1c9bc0"
+    },
+    {
+      "id": 8,
+      "sha256": "1df8a17ee53943027dfdb4e4b0eed6388b09b55e838ca1965fbc400a5864dd04"
+    },
+    {
+      "id": 9,
+      "sha256": "df470ce9d9b4530f743de8360f9628ad50c56b03928c3c42e9aa6afc270fdeea"
+    },
+    {
+      "id": 10,
+      "sha256": "7e162578c2019f4ebd26487f4606569a62e7c1c6cbef91917602127f3b0c7267"
+    },
+    {
+      "id": 11,
+      "sha256": "883daf4fb469b59011931dda219c296ccf9e0813a3d3e1600ec92be4a7c939a1"
+    },
+    {
+      "id": 12,
+      "sha256": "36e1c2e6f1091ee161419c5738c3f7da77ecc3859b758c2980fbea4b6eb69101"
+    },
+    {
+      "id": 13,
+      "sha256": "48515353ab1f369ab6e93e97a064a7895305e347ac6c52a2ea500263d1a986f4"
+    }
+  ],
+  "frozen_at": "2026-11-03T00:00:09Z",
+  "git_head": "af45273945fadaa57abd108791c5b7ab69d28da7",
+  "spec_sha256": "5f0f3f79b0d5175a82cd74d8e2e33b399a52561d956651f302d596f3b698725b",
+  "version": 1
+}
