@@ -459,7 +459,9 @@ The source of truth for a run. It holds the inventory, the merged trace, the pla
 node dist/cli.js ui
 ```
 
-It reads `failwalk-inventory.json`, `failwalk-trace.json` and `failwalk.json` from the current folder, writes `failwalk-ui.html` beside them, and opens it. `--inventory`, `--trace`, `--report` and `--out` name other files; `--no-open` only writes the page. The data sits inside the page, so the one file can be sent to anyone. Three.js comes from a CDN at one pinned version, so the page needs a connection the first time it opens.
+It reads `failwalk-inventory.json`, `failwalk-trace.json` and `failwalk.json` from the current folder, writes `failwalk-ui.html` beside them, and opens it. `--inventory`, `--trace`, `--report` and `--out` name other files; `--no-open` only writes the page. The data sits inside the page, so the one file can be sent to anyone. Three.js is the only thing it loads from outside, from a CDN at one pinned version, so the page needs a connection the first time it opens.
+
+The first thing on screen is every service at once. A service (a wrapper module) earns **complete** when every call into it has been walked under every failure mode and the code coped each time: it wears a calm green ring. A service with gaps shows how many, in red, and breathes until they are closed. Nothing is complete before a run.
 
 ![The map, on the walkthrough step for one uncaught cell: the call site's row is lit, and the panel lists the tests that reach it and the verdict under each failure mode.](docs/failwalk-ui.jpg)
 
@@ -477,9 +479,11 @@ What the colours mean:
 - **Amber, risk.** The tests passed, but a static check found a pattern that passing hides. These are `RISK` cells.
 - **Grey, nobody walked it.** No test reaches the call site, so no failure was ever injected there. These are `UNREACHED` cells.
 
-Red, amber and grey are the point. They are the failure paths nobody has walked, and each one names the file and line.
+Red, amber and grey are the point. They are the failure paths nobody has walked, and each one names the file and line. Red and amber cells pulse; grey cells wear a bright outline so they read as holes. The map never hides a grey cell and never calls a service complete that was not walked.
 
-The page opens with a question: walk through everything, or explore on your own. The walkthrough shows the big picture, then each wrapper, then every uncovered cell, one at a time, with Back and Next, the arrow keys, a chapter menu and a progress bar. Clicking anything mid-walkthrough pauses it and offers the way back to the same step. Explore shows the whole board; drag to turn it, right-drag to pan, scroll to zoom. Clicking a call site opens a panel with its file and line, the wrapper method, the tests that reach it, and the verdict and note under each failure mode. Clicking a test lists the call sites it reaches. Clicking a wrapper lists its call sites, worst first. The index on the left searches all of them.
+The page opens with a question: walk through everything, or explore on your own. The walkthrough shows the big picture, then each service, then a tour of the gaps, one at a time, with Back and Next, the arrow keys, a chapter menu, a progress bar and a running count ("Gap 4 of 12"). Each stop moves the camera to the spot, runs a particle along the beams of the tests that reach it, and says in plain words what goes wrong in production if that failure hits today: a hung write that a retry sends twice, an error that escapes with nothing to catch it, a line no test has ever seen fail. Clicking anything mid-walkthrough pauses it and offers the way back to the same step.
+
+The map remembers, in the browser, what it showed last time for this project. Open it after a later run and the greeting says how many gaps closed since you last looked, and the walkthrough starts with those cells, each turning from its old colour to green. Anyone who asked their system for less motion gets the same information with nothing pulsing or gliding. Explore shows the whole board; drag to turn it, right-drag to pan, scroll to zoom. Clicking a call site opens a panel with its file and line, the wrapper method, the tests that reach it, and the verdict and note under each failure mode. Clicking a test lists the call sites it reaches. Clicking a wrapper lists its call sites, worst first. The index on the left searches all of them.
 
 ![The map in Explore: three wrapper groups, their call sites by file, the beams from the tests, and one row of coloured cells per call site.](docs/failwalk-ui-explore.jpg)
 

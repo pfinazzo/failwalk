@@ -19,8 +19,8 @@ export type CellState = "coped" | "uncaught" | "risk" | "unreached";
 /** How far the three files got: an inventory alone, a trace too, or a finished run. */
 export type SceneStatus = "inventory-only" | "traced" | "run";
 
-/** One cell of the picture: a call site under one failure mode. */
-export type SceneCell = { mode: ModeName; verdict: string | null; state: CellState; note: string };
+/** One cell of the picture: a call site under one failure mode. `production` says what goes wrong today if this failure hits. */
+export type SceneCell = { mode: ModeName; verdict: string | null; state: CellState; note: string; production: string };
 
 /** One call-site node: the inventory record, the tests that reach it, and its row of cells. */
 export type SceneSite = {
@@ -38,8 +38,11 @@ export type SceneSite = {
 /** One test node: its label, where it is, and the sites it reaches. */
 export type SceneTest = { label: string; file: string; name: string; sites: string[] };
 
-/** One wrapper group and the ids of its sites, in inventory order. */
-export type SceneWrapper = { name: string; sites: string[] };
+/**
+ * One wrapper group and the ids of its sites, in inventory order. `gaps` counts its cells that are not green.
+ * `complete` is earned: true only after a run in which every cell of every site coped. Nothing is complete before a run.
+ */
+export type SceneWrapper = { name: string; sites: string[]; gaps: number; complete: boolean };
 
 /** Everything the page draws. Written into the HTML as JSON. */
 export type Scene = {
@@ -76,6 +79,44 @@ export const NOTICE_BY_STATUS: Record<SceneStatus, string> = {
 
 /** How many characters of a failure message a cell's note keeps. */
 const NOTE_CHARS = 120;
+
+/** What a RISK means in production, by the static check that fired. */
+const PRODUCTION_BY_CHECK: Record<string, string> = {
+  "retry-without-idempotency-key": "The code retries this write without an idempotency key. A retry after a timeout can land the same charge or record twice.",
+  "no-timeout": "This call has no timeout. A slow vendor holds the request for as long as it likes, and every waiting request holds a connection.",
+  "swallowed-catch": "The catch swallows the error, so the caller carries on as if the call worked, with nothing to show that it did not.",
+  "retry-without-backoff": "The retries fire back to back, so a vendor that is already struggling gets hit harder, and the loop burns through its attempts in a moment.",
+  "unawaited-call": "Nothing waits for this call, so when it fails the error lands in the uncaught handler with no request left to answer.",
+};
+
+/** The fallback for a check the table does not name. */
+const PRODUCTION_UNKNOWN_CHECK = "A static check found a pattern here that passing tests hide. Read the check's name and the enclosing function.";
+
+/** What goes wrong in production today if this failure hits, by verdict. Writes get a second sentence, because a write that failed may still have landed. */
+const PRODUCTION_BY_VERDICT: Record<string, (params: { kind: string; checks: readonly string[] }) => string> = {
+  PASS: () => "A test has seen this failure here and the code coped.",
+  FAIL: () => "A test has seen this failure here, noticed it, and asserted on what the code did.",
+  CRASH: ({ kind }) =>
+    `If this failure hits today, the error escapes with nothing to catch it. The request dies with a 500, and if this line runs in a job, the job dies with it.${kind === "write" ? " Whatever the write had already changed stays half done." : ""}`,
+  HANG: ({ kind }) =>
+    `If the vendor hangs on this call today, the request that hit this line waits until something upstream gives up. Each one holds a connection open while it waits, and enough of them in a row take the service down.${kind === "write" ? " The write may or may not have landed, and a retry sends it again." : ""}`,
+  RISK: ({ checks }) => checks.map((check) => PRODUCTION_BY_CHECK[check] || PRODUCTION_UNKNOWN_CHECK).join(" "),
+  UNREACHED: () => "Nobody knows. No test has ever seen this line fail, so what happens here in production is a guess.",
+};
+
+/** The sentence for a verdict the table does not know. */
+const PRODUCTION_UNKNOWN_VERDICT = "The run gave this cell a verdict the map does not know, so treat it as unwalked.";
+
+/**
+ * Says what goes wrong in production today if this failure hits this call site. Pure.
+ *
+ * @param params.verdict - the cell's verdict, or null before a run
+ * @param params.kind - read or write
+ * @param params.checks - the checks that fired on the site
+ * @returns one or two plain sentences
+ */
+export const productionText = ({ verdict, kind, checks }: { verdict: string | null; kind: string; checks: readonly string[] }): string =>
+  verdict === null ? PRODUCTION_BY_VERDICT.UNREACHED({ kind, checks }) : (PRODUCTION_BY_VERDICT[verdict] || (() => PRODUCTION_UNKNOWN_VERDICT))({ kind, checks });
 
 /**
  * Labels a traced test the way `failwalk trace` does: the file relative to the root, then the test name.
@@ -150,7 +191,7 @@ const GREY_NOTES: Record<SceneStatus, (params: { reached: number }) => string> =
 /**
  * Builds one cell of a site's row. A cell the report holds takes its verdict and note from the run; any other cell is grey with a sentence saying why.
  *
- * @param params.site - the site id
+ * @param params.site - the inventory record
  * @param params.mode - the mode
  * @param params.cells - the report's cells by key
  * @param params.status - how far the files got
@@ -164,17 +205,18 @@ const toCell = ({
   status,
   reached,
 }: {
-  site: string;
+  site: SiteRecord;
   mode: ModeName;
   cells: Record<string, ReportCell>;
   status: SceneStatus;
   reached: number;
 }): SceneCell => {
-  const ran = cells[`${site}\n${mode}`];
-  if (!ran) return { mode, verdict: null, state: NO_VERDICT_STATE, note: GREY_NOTES[status]({ reached }) };
+  const ran = cells[`${site.id}\n${mode}`];
+  const checks = site.checks ?? [];
+  if (!ran) return { mode, verdict: null, state: NO_VERDICT_STATE, note: GREY_NOTES[status]({ reached }), production: productionText({ verdict: null, kind: site.kind, checks }) };
   const state = STATE_BY_VERDICT[ran.verdict] || NO_VERDICT_STATE;
   const note = state === "unreached" ? GREY_NOTES.run({ reached }) : ranNote({ cell: ran });
-  return { mode, verdict: ran.verdict, state, note };
+  return { mode, verdict: ran.verdict, state, note, production: productionText({ verdict: ran.verdict, kind: site.kind, checks }) };
 };
 
 /**
@@ -210,18 +252,23 @@ const toSite = ({
     kind: site.kind,
     checks: [...(site.checks ?? [])],
     tests,
-    cells: modes.map((mode) => toCell({ site: site.id, mode, cells, status, reached: tests.length })),
+    cells: modes.map((mode) => toCell({ site, mode, cells, status, reached: tests.length })),
   };
 };
 
 /**
- * Lists the wrappers in inventory order, each with its site ids.
+ * Lists the wrappers in inventory order, each with its site ids, its gap count, and whether it has earned "complete".
  *
- * @param params.sites - the inventory records
+ * @param params.sites - the shaped sites
+ * @param params.status - how far the files got; nothing is complete before a run
  * @returns the wrapper groups
  */
-const toWrappers = ({ sites }: { sites: readonly SiteRecord[] }): SceneWrapper[] =>
-  [...new Set(sites.map(({ wrapper }) => wrapper))].map((name) => ({ name, sites: sites.filter((site) => site.wrapper === name).map(({ id }) => id) }));
+const toWrappers = ({ sites, status }: { sites: readonly SceneSite[]; status: SceneStatus }): SceneWrapper[] =>
+  [...new Set(sites.map(({ wrapper }) => wrapper))].map((name) => {
+    const own = sites.filter((site) => site.wrapper === name);
+    const gaps = own.flatMap((site) => site.cells).filter((cell) => cell.state !== "coped").length;
+    return { name, sites: own.map(({ id }) => id), gaps, complete: status === "run" && gaps === 0 };
+  });
 
 /**
  * Says how far the files got. A report means a run; a trace alone means traced; the inventory alone is the start.
@@ -255,7 +302,7 @@ export const shapeScene = ({ inventory, trace, report }: { inventory: Inventory;
     headline: report?.headline ?? null,
     generatedAt: report?.generatedAt ?? trace?.generatedAt ?? null,
     modes,
-    wrappers: toWrappers({ sites: inventory.sites }),
+    wrappers: toWrappers({ sites, status }),
     sites,
     tests,
   };

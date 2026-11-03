@@ -5,7 +5,7 @@ import type { Inventory } from "../src/inventory/types";
 import type { TraceSummary } from "../src/tracer/mergeTraces";
 import { MODE_NAMES } from "../src/tracer/modes";
 import { renderPage } from "../src/ui/render";
-import { NOTICE_BY_STATUS, shapeScene, STATE_BY_VERDICT, type Report, type ReportCell } from "../src/ui/shape";
+import { NOTICE_BY_STATUS, productionText, shapeScene, STATE_BY_VERDICT, type Report, type ReportCell } from "../src/ui/shape";
 import { makeTempDir, runCli, SAMPLE_API } from "./helpers";
 
 const ROOT = "/work/service";
@@ -97,11 +97,35 @@ describe("shapeScene after a run (criteria 3, 4, 5)", () => {
     expect(scene.sites.every((site) => site.cells.map(({ mode }) => mode).join()  === "timeout,500,malformed")).toBe(true);
   });
 
-  test("groups sites under their wrapper in inventory order", () => {
+  test("groups sites under their wrapper in inventory order, counting each wrapper's gaps; none is complete while it has one", () => {
     expect(scene.wrappers).toEqual([
-      { name: "billing", sites: [SYNC, SIGNUP] },
-      { name: "database", sites: ["database.update@controllers/sync.js:14", ORPHAN] },
+      { name: "billing", sites: [SYNC, SIGNUP], gaps: 4, complete: false },
+      { name: "database", sites: ["database.update@controllers/sync.js:14", ORPHAN], gaps: 6, complete: false },
     ]);
+  });
+
+  test("a wrapper earns complete only after a run in which every cell coped", () => {
+    const allGreen: Report = { ...REPORT, cells: INVENTORY.sites.flatMap((site) => REPORT.plan.modes.map((mode) => cell({ site: site.id, mode, verdict: mode === "500" ? "FAIL" : "PASS" }))) };
+    const run = shapeScene({ inventory: INVENTORY, trace: TRACE, report: allGreen });
+    expect(run.wrappers.map(({ name, gaps, complete }) => [name, gaps, complete])).toEqual([["billing", 0, true], ["database", 0, true]]);
+    const traced = shapeScene({ inventory: INVENTORY, trace: TRACE, report: null });
+    expect(traced.wrappers.every(({ gaps, complete }) => gaps === MODE_NAMES.length * 2 && !complete)).toBe(true);
+  });
+
+  test("says what goes wrong in production for each verdict, with a second sentence for writes", () => {
+    expect(productionText({ verdict: "HANG", kind: "read", checks: [] })).toMatch(/^If the vendor hangs on this call today/);
+    expect(productionText({ verdict: "HANG", kind: "read", checks: [] })).not.toContain("retry sends it again");
+    expect(productionText({ verdict: "HANG", kind: "write", checks: [] })).toContain("The write may or may not have landed, and a retry sends it again.");
+    expect(productionText({ verdict: "CRASH", kind: "write", checks: [] })).toContain("Whatever the write had already changed stays half done.");
+    expect(productionText({ verdict: "RISK", kind: "write", checks: ["retry-without-idempotency-key", "no-timeout"] })).toBe("The code retries this write without an idempotency key. A retry after a timeout can land the same charge or record twice. This call has no timeout. A slow vendor holds the request for as long as it likes, and every waiting request holds a connection.");
+    expect(productionText({ verdict: "RISK", kind: "read", checks: ["something-new"] })).toMatch(/^A static check found a pattern here/);
+    expect(productionText({ verdict: "UNREACHED", kind: "read", checks: [] })).toBe("Nobody knows. No test has ever seen this line fail, so what happens here in production is a guess.");
+    expect(productionText({ verdict: null, kind: "read", checks: [] })).toBe(productionText({ verdict: "UNREACHED", kind: "read", checks: [] }));
+    expect(productionText({ verdict: "PASS", kind: "read", checks: [] })).toBe("A test has seen this failure here and the code coped.");
+    expect(productionText({ verdict: "MOCKED", kind: "read", checks: [] })).toBe("The run gave this cell a verdict the map does not know, so treat it as unwalked.");
+    const signup = scene.sites.find(({ id }) => id === SIGNUP);
+    expect(signup?.cells[1].production).toBe("The code retries this write without an idempotency key. A retry after a timeout can land the same charge or record twice.");
+    expect(scene.sites.find(({ id }) => id === ORPHAN)?.cells[0].production).toMatch(/^Nobody knows/);
   });
 
   test("makes one beam per test that reached a site, labelled the way failwalk trace labels it", () => {
@@ -186,8 +210,12 @@ describe("renderPage (criterion 2)", () => {
     expect(html).not.toContain("</script>\"");
     expect(html.match(/https:\/\/cdn\.jsdelivr\.net\/npm\/three@(\d+\.\d+\.\d+)\//g)?.length).toBeGreaterThan(0);
     expect(new Set(html.match(/three@(\d+\.\d+\.\d+)/g)).size).toBe(1);
-    expect(html).not.toMatch(/<link[^>]+href="(?!https:\/\/fonts|data:)/);
+    expect(html).not.toMatch(/<link[^>]+href="(?!data:)/);
     expect(html).not.toMatch(/<script[^>]+src=/);
+    expect(html).not.toContain("__STYLE__");
+    expect(html).not.toContain("__SCRIPT__");
+    expect(html).toContain("const SCENE = JSON.parse(");
+    expect(html).toContain(".intro .card {");
   });
 });
 
