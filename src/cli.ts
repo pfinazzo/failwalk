@@ -10,6 +10,8 @@ import { formatTraceSummary, mergeTraces, type TraceSummary } from "./tracer/mer
 import { MODE_NAMES, type ModeName } from "./tracer/modes";
 import { inventoryPath, traceDirPath } from "./tracer/paths";
 import { readTraceRecords } from "./tracer/traceFile";
+import { loadScene, openInBrowser } from "./ui/load";
+import { renderPage } from "./ui/render";
 
 /** Options of `failwalk inventory`, as commander parses them. */
 type InventoryOptions = { root: string; wrappers: string; out: string; ignore: string[] };
@@ -32,6 +34,9 @@ type RunCliOptions = {
   testTimeoutMs: string;
   modes: string[];
 };
+
+/** Options of `failwalk ui`, as commander parses them. `open` is false after --no-open. */
+type UiOptions = { inventory: string; trace: string; report: string; out: string; open: boolean };
 
 /** The default number of runner processes in flight at once. */
 const DEFAULT_CONCURRENCY = 4;
@@ -155,6 +160,24 @@ const runRun = async ({ root, wrappers, ignore, config, outDir, concurrency, min
 };
 
 /**
+ * Runs `failwalk ui`: shapes the inventory, the trace and the run report into one self-contained HTML page, writes it, and opens it in the browser.
+ * Prints the page's path and, before a run is complete, the sentence saying what to run next.
+ *
+ * @param params.inventory - the inventory file, required
+ * @param params.trace - the merged trace file, used when present
+ * @param params.report - the run report, used when present
+ * @param params.out - where to write the page
+ * @param params.open - open the page once written
+ */
+const runUi = ({ inventory, trace, report, out, open }: UiOptions): void => {
+  const scene = loadScene({ inventoryFile: path.resolve(inventory), traceFile: path.resolve(trace), reportFile: path.resolve(report) });
+  fs.writeFileSync(out, renderPage({ scene }));
+  const counts = `${scene.sites.length} call sites, ${scene.modes.length} modes, ${scene.tests.length} tests`;
+  process.stderr.write(`failwalk ui: ${counts}. written to ${path.resolve(out)}\n${scene.notice ? `${scene.notice}\n` : ""}`);
+  if (open) openInBrowser({ file: out, platform: process.platform });
+};
+
+/**
  * Runs `failwalk setup-path`: prints where the built Jest setup file is.
  */
 const printSetupPath = (): void => {
@@ -206,6 +229,16 @@ program
   .option("--test-timeout-ms <ms>", "per-test timeout given to the runner", String(DEFAULT_TEST_TIMEOUT_MS))
   .option("--modes <names...>", "modes to run instead of all of them", [])
   .action(runRun);
+
+program
+  .command("ui")
+  .description("Draw the grid as a 3D map in one self-contained HTML page, from failwalk-inventory.json, failwalk-trace.json and failwalk.json, and open it.")
+  .option("--inventory <file>", "the inventory file", inventoryPath({ env: process.env }))
+  .option("--trace <file>", "the merged trace file, used when it exists", "failwalk-trace.json")
+  .option("--report <file>", "the run report, used when it exists", "failwalk.json")
+  .option("--out <file>", "where to write the page", "failwalk-ui.html")
+  .option("--no-open", "write the page without opening it")
+  .action(runUi);
 
 program
   .command("setup-path")

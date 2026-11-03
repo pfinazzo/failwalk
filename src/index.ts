@@ -25,3 +25,7 @@ export { mergeTraces, formatTraceSummary } from "./tracer/mergeTraces";
 export { wrapExports } from "./tracer/wrapExports";
 export { parseStack, callerFrame } from "./tracer/stack";
 export { indexSites, reachFor } from "./tracer/siteIndex";
+export { shapeScene, STATE_BY_VERDICT, NOTICE_BY_STATUS } from "./ui/shape";
+export type { Scene, SceneSite, SceneCell, SceneTest, SceneWrapper, CellState, SceneStatus, Report, ReportCell } from "./ui/shape";
+export { renderPage } from "./ui/render";
+export { loadScene, openInBrowser } from "./ui/load";

@@ -15,7 +15,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"fs.cpSync('src/ui', 'dist/ui', { recursive: true, filter: (file) => !file.endsWith('.ts') })\"",
     "test": "npm run build && vitest run && npm test --prefix examples/sample-api",
     "failwalk": "node dist/cli.js",
     "test:tool": "npm run build && vitest run",

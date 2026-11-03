@@ -1,0 +1,148 @@
+# claimcheck claims file for failwalk v1, the map: failwalk ui draws the grid as a self-contained 3D page.
+# One entry per thing the author asserts about this diff. The diff is against main.
+# The page's script (src/ui/page/*.js) runs only in a browser, so no planted bug in it is caught by npm test; those claims are
+# checked by the headless-browser run named in each one, and their catch rate is expected to be 0.
+version: 1
+author: "claude-code/claude-fable-5-1"
+base: "main"
+claims:
+  - id: c1
+    claim: "src/cli.ts registers a `ui` command with --inventory (default from inventoryPath, so FAILWALK_INVENTORY is honoured), --trace (default failwalk-trace.json), --report (default failwalk.json), --out (default failwalk-ui.html) and --no-open; runUi resolves the three input paths, calls loadScene, writes renderPage's output to --out, prints `failwalk ui: <sites> call sites, <modes> modes, <tests> tests. written to <absolute out>` and the scene's notice when there is one to stderr, and calls openInBrowser unless --no-open was given"
+    confidence: 0.94
+    criteria: [1]
+    files: ["src/cli.ts"]
+    kill_condition: "test: tests/ui.test.ts::writes the page from the sample app's inventory alone, grey everywhere, and says what to run"
+    verified_by:
+      - "cmd: npm run test:tool"
+      - "obs: ran node dist/cli.js ui --no-open in a folder holding the sample run's files and in one holding only an inventory; both printed the written-to line, the second printed the notice"
+
+  - id: c2
+    claim: "loadScene in src/ui/load.ts reads the inventory through loadInventory and lets its error through uncaught, so a missing inventory file ends the command with the message loadInventory raises, which the CLI test checks names the path and says to run failwalk inventory; it reads failwalk-trace.json and failwalk.json only when they exist, falls back to the trace kept inside failwalk.json when the trace file is missing but the report is there, and hands the three to shapeScene; openInBrowser picks the opener from a table keyed by platform (darwin: open, win32: cmd /c start, linux: xdg-open, anything else treated as linux) and spawns it detached and unref'd"
+    confidence: 0.9
+    criteria: [1]
+    files: ["src/ui/load.ts"]
+    kill_condition: "test: tests/ui.test.ts::names the inventory file when it is missing and says to run failwalk inventory"
+    verified_by:
+      - "cmd: npm run test:tool"
+      - "obs: node dist/cli.js ui (without --no-open) on this Mac opened the page in the default browser"
+
+  - id: c3
+    claim: "renderPage in src/ui/render.ts reads dist/ui/template.html, dist/ui/page.css and the five parts dist/ui/page/{data,scene,panels,tour,loop}.js (all copied from src/ui by the build script in package.json, which copies everything under src/ui except .ts files), replaces __TITLE__ with `failwalk map · <root basename>` HTML-escaped, __STYLE__ with the stylesheet, __SCRIPT__ with the parts joined in that order, and __FAILWALK_DATA__ with the scene as JSON in which every `<` is written as \\u003c, so no test name or path can close the script block; every replacement takes a function so a `$` in the page's code is never read as a pattern; the template's only outside resource is Three.js 0.160.0 from cdn.jsdelivr.net through an import map (no stylesheet link, no script src, a data: favicon), so the written page needs no other file on disk"
+    confidence: 0.93
+    criteria: [2]
+    files: ["src/ui/render.ts", "src/ui/template.html", "package.json"]
+    kill_condition: "test: tests/ui.test.ts::puts the scene into the template as JSON that cannot close the script block, and pins Three.js to one version"
+    verified_by:
+      - "cmd: npm run test:tool"
+      - "cmd: grep -c 'three@0.160.0' src/ui/template.html (2, the two import map entries); grep -c '<script[^>]*src=\\|fonts.googleapis' src/ui/template.html (0)"
+
+  - id: c4
+    claim: "src/ui/page/scene.js sets up OrbitControls with damping, zoomToCursor and a 2.5 zoom speed, so the camera orbits on left-drag, pans on right-drag or a modifier-drag, and zooms on scroll; the renderer clears to #070b14 and page.css uses the system map's dark tokens; frame() moves the camera with a 0.7 s eased tween, or jumps at once when the person asked for reduced motion; a browser without WebGL sees the #nogl notice (src/ui/page/loop.js) while the index and panel keep working"
+    confidence: 0.88
+    criteria: [2]
+    files: ["src/ui/page/scene.js", "src/ui/page.css"]
+    kill_condition: "obs: open the page in a browser, drag, right-drag and scroll; the board turns, slides and grows"
+    verified_by:
+      - "obs: opened the sample run's page in headless Chromium through playwright-cli and in the desktop app's browser pane; the board drew on a dark background and responded to drag and scroll"
+
+  - id: c5
+    claim: "shapeScene in src/ui/shape.ts is pure and returns modes (the report's plan.modes copied when there is a report, else MODE_NAMES), wrappers (one per distinct wrapper name in inventory order, with its site ids, `gaps` = its cells that are not coped, and `complete` true only when the status is run and gaps is 0), sites (one per inventory record in inventory order, with id, file, line, wrapper, method, kind, checks defaulting to [], the sorted labels of the tests that reach it, and one cell per mode), tests (one per trace test with at least one site, labelled `<file relative to root> › <name>` the way mergeTraces labels them, with file, name and site ids), status (run when a report is given, traced when only a trace is, else inventory-only) and notice from NOTICE_BY_STATUS (empty for run); it mutates none of its inputs"
+    confidence: 0.94
+    criteria: [3]
+    files: ["src/ui/shape.ts", "src/index.ts"]
+    kill_condition: "test: tests/ui.test.ts::a wrapper earns complete only after a run in which every cell coped"
+    verified_by:
+      - "cmd: npm run test:tool"
+
+  - id: c6
+    claim: "STATE_BY_VERDICT in src/ui/shape.ts is exactly { PASS: coped, FAIL: coped, CRASH: uncaught, HANG: uncaught, RISK: risk, UNREACHED: unreached }; toCell reads it with `|| \"unreached\"`, so a verdict outside the table (such as MOCKED) is grey; a cell the report does not hold, which covers every cell when there is no report and a site the plan never listed, is grey with a null verdict; no state is chosen by an if/else ladder"
+    confidence: 0.95
+    criteria: [4]
+    files: ["src/ui/shape.ts"]
+    kill_condition: "test: tests/ui.test.ts::colours every verdict from the one lookup, and a verdict it does not know grey"
+    verified_by:
+      - "cmd: npm run test:tool"
+      - "cmd: grep -n 'else' src/ui/shape.ts (no matches)"
+
+  - id: c7
+    claim: "Each cell's note is one line: for a cell that ran, the verdict, `fired <n> time(s)`, `checks: <names>` only for a RISK with checks, and the first line of the first non-passed test's message (or the first runner error) cut to 120 characters, joined by `; `; for a grey cell, a sentence from GREY_NOTES keyed by status; and each cell's `production` comes from productionText, one table keyed by verdict (PASS, FAIL, CRASH, HANG, RISK, UNREACHED) with a second sentence for CRASH and HANG on a write, RISK joining one sentence per fired check from PRODUCTION_BY_CHECK (a generic sentence for a check it does not name), a null verdict reading as UNREACHED, and an unknown verdict giving the treat-it-as-unwalked sentence"
+    confidence: 0.93
+    criteria: [5]
+    files: ["src/ui/shape.ts"]
+    kill_condition: "test: tests/ui.test.ts::says what goes wrong in production for each verdict, with a second sentence for writes"
+    verified_by:
+      - "cmd: npm run test:tool"
+
+  - id: c8
+    claim: "src/ui/page/data.js lays out each wrapper as a block along x (a wrapper node above, its sites stacked downwards under a halo label naming each file, each site's cells to its right one per mode under rotated mode labels) and each test behind the board at z -22 or further; src/ui/page/scene.js draws a wrapper as an icosahedron with a green torus ring and a `✓ complete` badge when it is complete, a red breathing glow and a `<n> gaps` badge when a run left gaps, a site as a sphere, a cell as a box coloured from STATE_COLORS by state with red and amber cells pulsing (`pulse: 'cell'`), grey cells at 0.7 opacity with a bright EdgesGeometry outline, and one THREE.Line beam from each test to every site it reaches; the legend in loop.js names the four states, the complete ring, the test dot and the beam"
+    confidence: 0.9
+    criteria: [6]
+    files: ["src/ui/page/data.js", "src/ui/page/scene.js"]
+    kill_condition: "obs: open docs/failwalk-ui-explore.jpg; three wrapper groups with gap badges, call sites under file labels, outlined grey cells, beams from the tests, and the legend are visible"
+    verified_by:
+      - "obs: docs/failwalk-ui-explore.jpg was taken from the sample run's page in headless Chromium at 1440x900 and shows all of it"
+
+  - id: c9
+    claim: "In src/ui/page/panels.js, clicking a call-site sphere, its label, or an index entry calls showSite, whose head shows the wrapper, the wrapper.method, the file:line and the kind, and whose body shows the fired checks as chips, the tests that reach it as chips (or a sentence that none does), and one row per mode with its colour square, the mode, the state name, the note and the production sentence; clicking a cell opens the same panel with that mode's row marked; clicking a test sphere lists the sites it reaches; clicking a wrapper shows a callout saying it is complete, how many gaps it has, or that nothing is walked yet, then its sites sorted worst state first; picking (scene.js) is a Raycaster over every node mesh"
+    confidence: 0.9
+    criteria: [7]
+    files: ["src/ui/page/panels.js"]
+    kill_condition: "obs: open the page, click a call site, then a cell, then a test, then a wrapper; each panel shows what the claim lists"
+    verified_by:
+      - "obs: docs/failwalk-ui.jpg shows the site panel for billing.invoices.list with its two tests and six mode rows; the test and wrapper panels were opened in the desktop app's browser pane"
+
+  - id: c10
+    claim: "The greeting (src/ui/page/loop.js) shows one chip per service, `complete` in green, `<n> gaps` in red, or `not walked yet` before a run, a `<done> of <all> services fully walked` count, a since-you-last-looked line when the browser saw an earlier run of this root, and asks `Would you like to walk through everything or explore on your own?`; buildTour in src/ui/page/tour.js makes, in order, a start step naming how many services are fully walked, a colours step, one step per wrapper, a `Closed since last time` chapter with one step per cell that was not coped in the saved run and is coped now, then under `Uncovered failure paths` a notice step when the status is not run, one step per uncaught cell, one per risk cell, one per site with any grey cell (each gap step carrying gapIndex and gapTotal for the `Gap N of M` count), a single all-green step when a run has nothing uncovered, and an end step; the player has Back, Next, a chapter select, a progress bar, the running count and Exit; ArrowRight and ArrowLeft move it; Back is hidden on step 1 and Next on the last; onPick calls pauseTour, which shows `Back to the walkthrough · step N of M` unless the tour itself made the move"
+    confidence: 0.9
+    criteria: [8]
+    files: ["src/ui/page/tour.js", "src/ui/page/loop.js"]
+    kill_condition: "obs: on the sample run's page, start the walkthrough: step 1 has no Back, the last has no Next, the chapter list reads The big picture, 1. billing, 2. database, 3. mailer, Uncovered failure paths, The end"
+    verified_by:
+      - "obs: window.__failwalk.tour in headless Chromium had those chapters for the sample run, a notice step and no cell steps for the inventory-only page, and a Closed since last time chapter with two steps when a later run with two cells turned green was opened after the first"
+
+  - id: c11
+    claim: "Each gap step's `more` starts with the cell's production sentence; payOff in tour.js runs a particle along the beams of the tests that reach the gap (cycling through them), grows the cell to 1.9 and settles it at 1.15, and for a closed cell sets `flip` so the render loop (loop.js) lerps its colour from the saved state's colour to green over 1.2 s; under prefers-reduced-motion (REDUCED in data.js) there is no particle, no pulse, no grow and the colour switches at once; endPayOff stops all of it when the step changes or the tour pauses; compareRuns in data.js keeps, in localStorage under `failwalk-ui:<root>`, the run's generatedAt and every cell's state, and on a newer run lists the cells that went from not coped to coped (`fixed`) and counts the ones that went the other way (`newGaps`), keeping the comparison for reloads of the same run"
+    confidence: 0.86
+    criteria: [8]
+    files: ["src/ui/page/tour.js", "src/ui/page/data.js", "src/ui/page/loop.js"]
+    kill_condition: "obs: open the sample run's page, then a page made from a later failwalk.json in which two red cells are PASS; window.__failwalk.since.fixed lists those two keys and the greeting says 2 gaps closed"
+    verified_by:
+      - "obs: done in headless Chromium on 2026-11-03 with a staged later run; since.fixed had the two keys, the greeting said 2 gaps closed, and the tour's chapter list gained Closed since last time with two steps"
+
+  - id: c12
+    claim: "On examples/sample-api after failwalk run, the page's data holds 10 sites, 6 modes and 7 tests with every cell's real verdict, and on a folder holding only the sample app's inventory every cell is grey with the notice shown in the greeting and in the walkthrough's notice step; each page, served over HTTP and opened in headless Chromium through playwright-cli, logged zero console messages after loading, opening Explore, and stepping the walkthrough"
+    confidence: 0.9
+    criteria: [9]
+    files: ["src/ui/page/loop.js", "src/ui/load.ts"]
+    kill_condition: "cmd: node dist/cli.js inventory --root examples/sample-api --wrappers 'config/**/*.js' && node dist/cli.js ui --no-open && grep -c '\"status\":\"inventory-only\"' failwalk-ui.html"
+    verified_by:
+      - "obs: playwright-cli console reported `Total messages: 0 (Errors: 0, Warnings: 0)` for both pages on 2026-11-03"
+      - "test: tests/ui.test.ts::writes the page from the sample app's inventory alone, grey everywhere, and says what to run"
+
+  - id: c13
+    claim: "tests/ui.test.ts covers shapeScene's modes, wrappers with their gaps and completeness, site rows, test beams, every row of STATE_BY_VERDICT plus an unknown verdict, the notes, productionText for every verdict and for writes, the three statuses with their notices, and that inputs are not mutated; plus renderPage's escaping, pinning and marker filling, and the CLI on an inventory-only folder and on a missing inventory; `npm test` builds, runs the vitest suite (98 tests) and the sample app's suite, and exits 0 on Node 24"
+    confidence: 0.9
+    criteria: [10]
+    files: ["src/index.ts"]
+    kill_condition: "cmd: npm test"
+    verified_by:
+      - "cmd: npm test (98 vitest tests and 9 sample tests, exit 0, Node 24.21.0)"
+
+  - id: c14
+    claim: "README.md gains a `failwalk ui` row in the table and a `The map` section with the command, the options, what the picture shows, how a service earns complete, the four colours, the gap tour with its production sentences and running count, the since-you-last-looked memory, reduced motion, what the page does before a run, and two screenshots at docs/failwalk-ui.jpg and docs/failwalk-ui-explore.jpg taken from the sample run's page; docs/decisions.md records why the map is one self-contained HTML file, why rows are call sites and columns are failure modes, why complete is earned, why the tour is of the gaps, why the browser remembers the last run, why reduced motion keeps the facts, and why the page is split into parts, each with its reasons and the code that carries it out"
+    confidence: 0.95
+    criteria: [11, 12]
+    files: ["README.md", "docs/decisions.md"]
+    kill_condition: "cmd: grep -c 'docs/failwalk-ui.jpg' README.md && grep -c 'self-contained' docs/decisions.md && test -s docs/failwalk-ui.jpg"
+    verified_by:
+      - "cmd: all three ran with counts of 1 or more"
+
+  - id: c15
+    claim: "No file under src, tests, docs or examples, and no line of README.md, names, links, reads or loads any real-world vendor, service, product or repository (no editor link, no named font, only generic font families), the two outside addresses in the whole diff being the Three.js import map entries on cdn.jsdelivr.net that criterion 2 asks for. The TypeScript under src/ui (shape.ts, render.ts, load.ts) follows the conventions in full: arrow-function consts only, one named-params object per function (the callbacks handed to Array map, filter, flatMap, find, some, reduce and String replace aside), a doc block on every function, rule and lookup tables for the status, the verdict-to-state, the notices, the grey notes, the production sentences and the openers, no class, let, var, for loop or if/else, no input mutation, no await. The page's JavaScript under src/ui/page is a port of the system map template's style and departs from the conventions where that style does: it uses `function` declarations with positional parameters for the scene setup, the camera, the render loop, the panel, index and view routines and the tour routines (showSite, showWrapper, buildIndex, buildTour, showTourStep, startTour, pauseTour, payOff among them), doc comments on some functions only, `let` for the renderer, camera and tween handles, and if-chains in toTourLabel and the keydown handler; its lookup tables are STATE_COLORS, STATE_TEXT, STATE_NAMES, MODE_TEXT, VERDICT_TEXT, NEIGHBOURS, SHOW, TOUR_SHOW, PULSES and the tooltip and name tables; and no page code mutates the scene data it was given"
+    confidence: 0.86
+    criteria: [13]
+    files: ["src/ui/shape.ts", "src/ui/render.ts", "src/ui/load.ts", "src/ui/template.html", "src/ui/page.css", "src/ui/page/data.js", "src/ui/page/scene.js", "src/ui/page/panels.js", "src/ui/page/tour.js", "src/ui/page/loop.js"]
+    kill_condition: "cmd: ! grep -rnE '^\\s*(export )?(class|function|var|let) |for \\(|while \\(' src/ui/*.ts && ! grep -rniE 'chargebee|firebase|stripe|algolia|api-v4|tonebase|github\\.com|googleapis|https?://' src tests examples docs README.md | grep -v 'cdn.jsdelivr.net/npm/three@0.160.0'"
+    verified_by:
+      - "cmd: both greps ran with no matches"
+      - "obs: read every new file and listed, above, each place the page's JavaScript keeps the system map template's style instead of the conventions; the TypeScript has none"

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="generator" content="failwalk ui" />
+<title>__TITLE__</title>
+<link rel="icon" href="data:," />
+<style>
+__STYLE__
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="labels"></div>
+<div class="nogl" id="nogl">3D isn't available in this browser. The index on the left and the detail panel still work: pick any wrapper, call site or test.</div>
+
+<div class="topbar">
+  <button class="iconbtn" id="toggleIndex" title="Show or hide the index">☰ Index</button>
+  <div class="brand" id="brand"></div>
+  <div class="tabs" role="tablist" id="tabs">
+    <button class="tab" data-view="tour">Walkthrough</button>
+    <button class="tab on" data-view="explore">Explore</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="built" id="built" title="When the data was written"></span>
+  <button class="iconbtn" id="helpBtn">How to read this</button>
+</div>
+
+<aside class="index" id="index">
+  <header><input class="search" id="search" placeholder="Search call sites and tests…" /></header>
+  <div class="scroll" id="indexList"></div>
+</aside>
+
+<aside class="panel" id="panel">
+  <div class="head" id="panelHead"></div>
+  <div class="body" id="panelBody"></div>
+</aside>
+
+<!-- Shown while the walkthrough is paused because the person clicked something: one click goes back to the same step. -->
+<button class="resume" id="tourResume" hidden>↩ Back to the walkthrough · <span id="tourResumeStep"></span></button>
+
+<!-- The guided walkthrough's controls: where it is, what it says, and Back, Next and Exit. -->
+<div class="player" id="tour">
+  <div class="top">
+    <select id="tourChapter" aria-label="Jump to a chapter"></select>
+    <span class="tourtag" id="tourTag"></span>
+    <span class="tourcount" id="tourCount"></span>
+    <button class="btn" id="tourExit">Exit walkthrough</button>
+  </div>
+  <div class="tourbar" aria-hidden="true"><i id="tourBar"></i></div>
+  <p class="say" id="tourSay"></p>
+  <p class="more" id="tourMore"></p>
+  <div class="ctrls">
+    <span class="num" id="tourNum"></span>
+    <button class="btn" id="tourPrev">Back</button>
+    <button class="btn primary" id="tourNext">Next</button>
+  </div>
+</div>
+
+<div class="legend" id="legend"></div>
+<div class="hint" id="hint">Drag to turn · right-drag or shift-drag to pan · scroll to zoom · click anything</div>
+<div id="tip"></div>
+
+<div class="intro" id="intro"><div class="card" id="introCard"></div></div>
+
+<!-- The scene: the inventory, the trace and the run, shaped by failwalk ui. -->
+<script type="application/json" id="failwalk-data">__FAILWALK_DATA__</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+__SCRIPT__
+</script>
+</body>
+</html>
