@@ -2,8 +2,8 @@ import type { PlanCell } from "../plan/buildPlan";
 import type { ModeName } from "../tracer/modes";
 import { VERDICT_ORDER, type CellEvidence, type Verdict } from "../verdicts";
 
-/** A planned cell after its run: the verdict, and the evidence when it ran. */
-export type CellResult = Omit<PlanCell, "verdict"> & { verdict: Verdict; evidence: CellEvidence | null };
+/** A planned cell after its run: the verdict, the static checks that fired on its site, and the evidence when it ran. */
+export type CellResult = Omit<PlanCell, "verdict"> & { verdict: Verdict; checks: string[]; evidence: CellEvidence | null };
 
 /** How many cells ended with each verdict. */
 export type VerdictCounts = Record<Verdict, number>;
@@ -21,13 +21,15 @@ export const countVerdicts = ({ cells }: { cells: readonly CellResult[] }): Verd
   cells.reduce<VerdictCounts>((acc, { verdict }) => ({ ...acc, [verdict]: acc[verdict] + 1 }), {
     CRASH: 0,
     HANG: 0,
+    RISK: 0,
     FAIL: 0,
     PASS: 0,
     UNREACHED: 0,
   });
 
 /**
- * The covered fraction: PASS and FAIL cells over all cells. Zero when there are no cells.
+ * The covered fraction: PASS and FAIL cells over all cells. Zero when there are no cells. RISK is not covered: the
+ * tests passed, but the pattern the check found is what they did not test.
  *
  * @param params.cells - the run's cells
  * @returns a number from 0 to 1
@@ -49,7 +51,7 @@ export const formatHeadline = ({ sites, modes, cells }: { sites: number; modes: 
   const counts = countVerdicts({ cells });
   const covered = counts.PASS + counts.FAIL;
   const percent = Math.round(coveredFraction({ cells }) * 100);
-  return `failwalk: ${sites} call sites, ${modes} modes, ${cells.length} cells. ${covered} covered (${percent}%). ${counts.CRASH} CRASH, ${counts.HANG} HANG, ${counts.FAIL} FAIL, ${counts.UNREACHED} UNREACHED.`;
+  return `failwalk: ${sites} call sites, ${modes} modes, ${cells.length} cells. ${covered} covered (${percent}%). ${counts.CRASH} CRASH, ${counts.HANG} HANG, ${counts.FAIL} FAIL, ${counts.RISK} RISK, ${counts.UNREACHED} UNREACHED.`;
 };
 
 /**
@@ -62,7 +64,7 @@ export const formatHeadline = ({ sites, modes, cells }: { sites: number; modes: 
 export const exitCodeFor = ({ covered, minCoverage }: { covered: number; minCoverage: number }): number => (covered < minCoverage ? 1 : 0);
 
 /**
- * A short note for one cell's row: how often the injection fired and the first line of the first failure.
+ * A short note for one cell's row: how often the injection fired, the checks behind a RISK verdict, and the first line of the first failure.
  *
  * @param params.cell - the cell
  * @returns the note, empty for an UNREACHED cell
@@ -71,8 +73,8 @@ const noteFor = ({ cell }: { cell: CellResult }): string => {
   if (!cell.evidence) return "";
   const failure = cell.evidence.tests.find(({ outcome }) => outcome !== "passed");
   const firstLine = (failure?.message || cell.evidence.runnerErrors[0] || "").split("\n")[0].slice(0, NOTE_CHARS);
-  const fired = `fired ${cell.evidence.fired}`;
-  return firstLine ? `${fired}; ${firstLine}` : fired;
+  const checks = cell.verdict === "RISK" ? `checks: ${cell.checks.join(", ")}` : "";
+  return [`fired ${cell.evidence.fired}`, checks, firstLine].filter((part) => part !== "").join("; ");
 };
 
 /**
@@ -94,7 +96,7 @@ const byVerdictThenPlan = ({ cells, modes }: { cells: readonly CellResult[]; mod
     .map(({ cell }) => cell);
 
 /**
- * Formats the terminal table: one block per wrapper, one row per cell naming the verdict, the mode and the site, CRASH and HANG rows first.
+ * Formats the terminal table: one block per wrapper, one row per cell naming the verdict, the mode and the site, CRASH, HANG and RISK rows first.
  *
  * @param params.cells - the run's cells, in plan order
  * @param params.modes - the modes in grid order

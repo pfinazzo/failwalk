@@ -1,5 +1,5 @@
-/** One verdict per cell. This step produces these five; RISK and MOCKED are later steps. */
-export type Verdict = "PASS" | "FAIL" | "CRASH" | "HANG" | "UNREACHED";
+/** One verdict per cell. MOCKED is a later step. */
+export type Verdict = "PASS" | "FAIL" | "CRASH" | "HANG" | "RISK" | "UNREACHED";
 
 /** How one planned test ended under injection. `missing` means the runner reported no result for it. */
 export type TestOutcome = "passed" | "assertion" | "timeout" | "error" | "missing";
@@ -21,7 +21,7 @@ export type CellEvidence = {
 };
 
 /** The verdicts in the order the terminal lists them: the worst first. */
-export const VERDICT_ORDER: readonly Verdict[] = ["CRASH", "HANG", "FAIL", "PASS", "UNREACHED"];
+export const VERDICT_ORDER: readonly Verdict[] = ["CRASH", "HANG", "RISK", "FAIL", "PASS", "UNREACHED"];
 
 /** A runner failure message starts with the error's name. Assertion errors from the runner's matchers start with `expect(` after it. */
 const LEADING_ERROR_NAME = /^\w*Error: /;
@@ -45,23 +45,30 @@ const FAILURE_KINDS: readonly { outcome: TestOutcome; matches: (params: { messag
 export const classifyFailure = ({ message }: { message: string }): TestOutcome =>
   (FAILURE_KINDS.find((kind) => kind.matches({ message })) as (typeof FAILURE_KINDS)[number]).outcome;
 
+/** What the verdict lookup reads: the run's evidence, and the static checks that fired on the cell's site. */
+type VerdictInput = { evidence: CellEvidence; checks: readonly string[] };
+
 /**
  * The verdict rules, tested in order. The first row whose condition holds names the verdict.
  * A planned test with no result counts as a crash: the runner lost it, and a lost test proves nothing.
+ * The RISK row sits after FAIL, so it only applies to a cell that would otherwise be PASS: the tests passed, but a
+ * static check found a pattern that passing hides.
  */
-const VERDICT_RULES: readonly { verdict: Verdict; when: (params: { evidence: CellEvidence }) => boolean }[] = [
+const VERDICT_RULES: readonly { verdict: Verdict; when: (params: VerdictInput) => boolean }[] = [
   { verdict: "CRASH", when: ({ evidence }) => !evidence.ran },
   { verdict: "CRASH", when: ({ evidence }) => evidence.tests.some(({ outcome }) => outcome === "error" || outcome === "missing") },
   { verdict: "HANG", when: ({ evidence }) => evidence.tests.some(({ outcome }) => outcome === "timeout") },
   { verdict: "FAIL", when: ({ evidence }) => evidence.tests.some(({ outcome }) => outcome === "assertion") },
+  { verdict: "RISK", when: ({ checks }) => checks.length > 0 },
   { verdict: "PASS", when: () => true },
 ];
 
 /**
- * Looks up the verdict for one cell from what its run did. Pure.
+ * Looks up the verdict for one cell from what its run did and what the static checks found. Pure.
  *
  * @param params.evidence - the cell's runner evidence
+ * @param params.checks - the check names that fired on the cell's site, empty when none did
  * @returns the verdict
  */
-export const verdictFor = ({ evidence }: { evidence: CellEvidence }): Verdict =>
-  (VERDICT_RULES.find((rule) => rule.when({ evidence })) as (typeof VERDICT_RULES)[number]).verdict;
+export const verdictFor = ({ evidence, checks = [] }: { evidence: CellEvidence; checks?: readonly string[] }): Verdict =>
+  (VERDICT_RULES.find((rule) => rule.when({ evidence, checks })) as (typeof VERDICT_RULES)[number]).verdict;

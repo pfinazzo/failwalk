@@ -11,21 +11,22 @@ import type { CellEvidence, Verdict } from "../src/verdicts";
  * @param params.wrapper - wrapper name
  * @param params.mode - mode name
  * @param params.verdict - the verdict
+ * @param params.checks - the checks that fired on the site
  * @returns the cell
  */
-const cell = ({ site, wrapper, mode, verdict }: { site: string; wrapper: string; mode: CellResult["mode"]; verdict: Verdict }): CellResult => {
+const cell = ({ site, wrapper, mode, verdict, checks = [] }: { site: string; wrapper: string; mode: CellResult["mode"]; verdict: Verdict; checks?: string[] }): CellResult => {
   const evidence: CellEvidence | null =
     verdict === "UNREACHED"
       ? null
       : {
           ran: true,
-          exitCode: verdict === "PASS" ? 0 : 1,
+          exitCode: verdict === "PASS" || verdict === "RISK" ? 0 : 1,
           fired: 1,
-          tests: [{ file: "t.test.js", name: "t", outcome: verdict === "PASS" ? "passed" : "error", message: verdict === "PASS" ? "" : `${verdict} happened here\nmore` }],
+          tests: [{ file: "t.test.js", name: "t", outcome: verdict === "PASS" || verdict === "RISK" ? "passed" : "error", message: verdict === "PASS" || verdict === "RISK" ? "" : `${verdict} happened here\nmore` }],
           runnerErrors: [],
           durationMs: 1,
         };
-  return { site, wrapper, mode, tests: [], verdict, evidence };
+  return { site, wrapper, mode, tests: [], verdict, checks, evidence };
 };
 
 const CELLS: CellResult[] = [
@@ -34,16 +35,17 @@ const CELLS: CellResult[] = [
   cell({ site: "billing.retrieve@a.js:1", wrapper: "billing", mode: "malformed", verdict: "PASS" }),
   cell({ site: "database.update@b.js:9", wrapper: "database", mode: "timeout", verdict: "PASS" }),
   cell({ site: "database.update@b.js:9", wrapper: "database", mode: "500", verdict: "CRASH" }),
+  cell({ site: "database.update@b.js:9", wrapper: "database", mode: "malformed", verdict: "RISK", checks: ["unawaited-call", "no-timeout"] }),
   cell({ site: "mailer.send@c.js:2", wrapper: "mailer", mode: "timeout", verdict: "UNREACHED" }),
   cell({ site: "mailer.send@c.js:2", wrapper: "mailer", mode: "500", verdict: "UNREACHED" }),
 ];
 
-describe("the headline (criterion 7)", () => {
-  test("has the spec's exact shape and counts PASS and FAIL as covered", () => {
-    expect(formatHeadline({ sites: 3, modes: 2, cells: CELLS })).toBe("failwalk: 3 call sites, 2 modes, 7 cells. 3 covered (43%). 1 CRASH, 1 HANG, 1 FAIL, 2 UNREACHED.");
-    expect(countVerdicts({ cells: CELLS })).toEqual({ CRASH: 1, HANG: 1, FAIL: 1, PASS: 2, UNREACHED: 2 });
-    expect(coveredFraction({ cells: CELLS })).toBeCloseTo(3 / 7);
-    expect(formatHeadline({ sites: 0, modes: 6, cells: [] })).toBe("failwalk: 0 call sites, 6 modes, 0 cells. 0 covered (0%). 0 CRASH, 0 HANG, 0 FAIL, 0 UNREACHED.");
+describe("the headline (criterion 10)", () => {
+  test("has the spec's exact shape with RISK after FAIL, and counts PASS and FAIL as covered but not RISK", () => {
+    expect(formatHeadline({ sites: 3, modes: 2, cells: CELLS })).toBe("failwalk: 3 call sites, 2 modes, 8 cells. 3 covered (38%). 1 CRASH, 1 HANG, 1 FAIL, 1 RISK, 2 UNREACHED.");
+    expect(countVerdicts({ cells: CELLS })).toEqual({ CRASH: 1, HANG: 1, RISK: 1, FAIL: 1, PASS: 2, UNREACHED: 2 });
+    expect(coveredFraction({ cells: CELLS })).toBeCloseTo(3 / 8);
+    expect(formatHeadline({ sites: 0, modes: 6, cells: [] })).toBe("failwalk: 0 call sites, 6 modes, 0 cells. 0 covered (0%). 0 CRASH, 0 HANG, 0 FAIL, 0 RISK, 0 UNREACHED.");
   });
 });
 
@@ -56,19 +58,20 @@ describe("the exit code (criterion 8)", () => {
   });
 });
 
-describe("the terminal table (criterion 6)", () => {
-  test("groups cells by wrapper and lists CRASH and HANG rows first, each naming verdict, mode and site", () => {
+describe("the terminal table (criterion 10)", () => {
+  test("groups cells by wrapper and lists CRASH, HANG and RISK rows first, each naming verdict, mode and site, RISK rows naming their checks", () => {
     const grid = formatGrid({ cells: CELLS, modes: MODE_NAMES });
     const lines = grid.split("\n");
     expect(lines[0]).toBe("billing   3 cells: 1 HANG, 1 FAIL, 1 PASS");
     expect(lines[1]).toMatch(/^ {2}HANG {6}timeout {3}billing\.retrieve@a\.js:1 {3}fired 1; HANG happened here$/);
     expect(lines[2]).toMatch(/^ {2}FAIL {6}500 {7}billing\.retrieve@a\.js:1/);
     expect(lines[3]).toMatch(/^ {2}PASS {6}malformed billing\.retrieve@a\.js:1 {3}fired 1$/);
-    expect(lines[5]).toBe("database   2 cells: 1 CRASH, 1 PASS");
+    expect(lines[5]).toBe("database   3 cells: 1 CRASH, 1 RISK, 1 PASS");
     expect(lines[6]).toMatch(/^ {2}CRASH {5}500 {7}database\.update@b\.js:9/);
-    expect(lines[7]).toMatch(/^ {2}PASS {6}timeout {3}database\.update@b\.js:9/);
-    expect(lines[9]).toBe("mailer   2 cells: 2 UNREACHED");
-    expect(lines[10]).toBe("  UNREACHED timeout   mailer.send@c.js:2");
+    expect(lines[7]).toBe("  RISK      malformed database.update@b.js:9   fired 1; checks: unawaited-call, no-timeout");
+    expect(lines[8]).toMatch(/^ {2}PASS {6}timeout {3}database\.update@b\.js:9/);
+    expect(lines[10]).toBe("mailer   2 cells: 2 UNREACHED");
+    expect(lines[11]).toBe("  UNREACHED timeout   mailer.send@c.js:2");
   });
 });
 

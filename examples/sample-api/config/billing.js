@@ -1,4 +1,8 @@
 /** A stand-in billing vendor. Every method answers from memory, without a network. */
+const { timed } = require("../lib/withTimeout");
+
+/** How long one vendor call may take before the wrapper gives up, in milliseconds. */
+const VENDOR_TIMEOUT_MS = 5000;
 
 const SUBSCRIPTIONS = [
   { id: "sub_1", customer_id: "cus_1", status: "active", plan_id: "premium" },
@@ -61,4 +65,12 @@ const cancel = async ({ subscriptionId }) => {
  */
 const list = async ({ customerId }) => INVOICES_BY_CUSTOMER[customerId] || [];
 
-module.exports = { subscriptions: { retrieve, create, cancel }, invoices: { list } };
+/** Every method goes out with the wrapper's time limit. The stand-in answers at once, so the limit is never hit here. */
+module.exports = {
+  subscriptions: {
+    retrieve: timed({ method: retrieve, timeoutMs: VENDOR_TIMEOUT_MS, what: "billing.subscriptions.retrieve" }),
+    create: timed({ method: create, timeoutMs: VENDOR_TIMEOUT_MS, what: "billing.subscriptions.create" }),
+    cancel: timed({ method: cancel, timeoutMs: VENDOR_TIMEOUT_MS, what: "billing.subscriptions.cancel" }),
+  },
+  invoices: { list: timed({ method: list, timeoutMs: VENDOR_TIMEOUT_MS, what: "billing.invoices.list" }) },
+};

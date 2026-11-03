@@ -1,0 +1,19 @@
+# Acceptance criteria
+
+Task: failwalk v1, step 5 of the build order in `SPEC.md`: the static checks and the `RISK` verdict. Base branch for the diff: `main`.
+Frozen with `claimcheck spec freeze`. Add nothing after the diff starts.
+
+- [ ] 1. The static checks live in one lookup table in `src/inventory/staticChecks.ts`, one row per check, each row a name and a pure function from a call site's enclosing function (a Babel AST node plus the call node) to true or false. The rows are `retry-without-idempotency-key`, `no-timeout`, `swallowed-catch`, `retry-without-backoff` and `unawaited-call`. Adding a check means adding a row; no check is chosen by an `if`/`else` ladder.
+- [ ] 2. A call site is "inside a retry" when it sits in the body of a `for`, `while` or `do` loop that contains a `try`/`catch`, or inside a callback passed to a call whose callee name is `retry`, `pRetry`, `withRetry` or `retryAsync`. A function that calls itself from inside a `catch` is not detected; the inventory records `retry-shape-unknown` in the site's `notes` array for such a site so the report can say so.
+- [ ] 3. `retry-without-idempotency-key` fires when the site is inside a retry, its `kind` is `write`, and no argument of the call carries a property or header named `idempotency_key`, `idempotencyKey` or `Idempotency-Key`.
+- [ ] 4. `no-timeout` fires when no argument of the call carries a property named `timeout`, `timeoutMs` or `timeout_ms`, and the wrapper module's source for that method contains no identifier named `timeout`, `timeoutMs` or `timeout_ms`.
+- [ ] 5. `swallowed-catch` fires when the call sits inside a `try` whose `catch` block contains no `throw`, no `return` with an argument, and no call to `Promise.reject`.
+- [ ] 6. `retry-without-backoff` fires when the site is inside a retry and the loop body or callback contains no `await` of a call whose callee name contains `sleep`, `delay`, `wait` or `setTimeout`.
+- [ ] 7. `unawaited-call` fires when the call expression is neither awaited, returned, assigned to a variable or property, passed as an argument, nor followed by `.then` or `.catch`.
+- [ ] 8. Every inventory record gains `checks`, the array of check names that fired (empty when none), and `notes`, the array from criterion 2 (empty when none). The inventory summary printed by `failwalk inventory` adds one line per fired check: the check name, then the site id.
+- [ ] 9. The verdict lookup gains one rule: a cell whose runtime verdict is `PASS` and whose site has at least one fired check becomes `RISK`, and the cell records the check names. All other verdicts are unchanged. `RISK` is not counted as covered.
+- [ ] 10. The headline line gains `<risk> RISK` after `<fail> FAIL`, and the terminal table lists `RISK` cells after `CRASH` and `HANG` and before the rest, each naming its checks.
+- [ ] 11. `examples/sample-api` gains at least one call site for each of the five checks, each in its own controller function named for the pattern it shows, with a test that reaches it, so every check and the `RISK` verdict appear in the README's real output.
+- [ ] 12. Unit tests cover each check firing and not firing on fixture source files, the `retry-shape-unknown` note, the `RISK` rule in the verdict lookup, and the headline; `npm test` exits 0.
+- [ ] 13. The README gains a "Step 5: RISK" section with the real inventory check lines and the real grid from `failwalk run` against `examples/sample-api`, and one paragraph per check saying in plain words what goes wrong in production when that pattern ships.
+- [ ] 14. Nothing in failwalk names, reads or depends on any real-world service or repository, and all new source follows the conventions in `~/.claude/CLAUDE.md`: arrow-function consts, one named-params object per function, lookup tables instead of branch chains, a doc block on every function, no classes, no mutation of inputs, no `await` inside a loop over a collection.

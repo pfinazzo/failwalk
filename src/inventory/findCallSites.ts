@@ -1,20 +1,13 @@
-import { parse, type ParserPlugin } from "@babel/parser";
 import traverse, { type NodePath, type Scope } from "@babel/traverse";
 import * as t from "@babel/types";
 import path from "node:path";
 import { kindOfMethod } from "./kinds";
+import { parseSource } from "./parseSource";
 import { resolveWrapperFile } from "./resolveWrapper";
+import { checksFor, notesFor } from "./staticChecks";
 import { wrapperNameOf } from "./wrapperName";
+import { hasTimeout, NO_TIMEOUTS, type WrapperTimeouts } from "./wrapperTimeouts";
 import type { CallSite } from "./types";
-
-/** Babel syntax plugins by file extension. Plain JavaScript gets JSX only. */
-const PLUGINS_BY_EXTENSION: Record<string, ParserPlugin[]> = {
-  ".ts": ["typescript"],
-  ".mts": ["typescript"],
-  ".cts": ["typescript"],
-  ".tsx": ["typescript", "jsx"],
-};
-const DEFAULT_PLUGINS: ParserPlugin[] = ["jsx"];
 
 /** Where a local name came from: which wrapper, and which export of it (null for the whole module). */
 type WrapperBinding = { wrapper: string; member: string | null };
@@ -204,6 +197,7 @@ const callLine = ({ callee }: { callee: t.Node }): number =>
  * @param params.file - path relative to root, with forward slashes
  * @param params.bindings - wrapper bindings collected from imports and requires
  * @param params.wrapperOf - resolves an import source to a wrapper name
+ * @param params.wrapperTimeouts - what each wrapper says about timeouts, by wrapper name
  * @returns a call site, or null
  */
 const siteOfCall = ({
@@ -211,11 +205,13 @@ const siteOfCall = ({
   file,
   bindings,
   wrapperOf,
+  wrapperTimeouts,
 }: {
   nodePath: NodePath<t.CallExpression | t.OptionalCallExpression>;
   file: string;
   bindings: Map<t.Identifier, WrapperBinding>;
   wrapperOf: WrapperLookup;
+  wrapperTimeouts: Readonly<Record<string, WrapperTimeouts>>;
 }): CallSite | null => {
   const { callee } = nodePath.node;
   const { root, members } = calleeChain({ node: callee });
@@ -223,13 +219,18 @@ const siteOfCall = ({
   if (!binding) return null;
   const method = [binding.member, ...members].filter((segment) => segment !== null).join(".") || "default";
   const line = callLine({ callee });
+  const kind = kindOfMethod({ method });
+  const enclosing = nodePath.getFunctionParent();
+  const wrapperHasTimeout = hasTimeout({ timeouts: wrapperTimeouts[binding.wrapper] ?? NO_TIMEOUTS, method });
   return {
     id: `${binding.wrapper}.${method}@${file}:${line}`,
     file,
     line,
     wrapper: binding.wrapper,
     method,
-    kind: kindOfMethod({ method }),
+    kind,
+    checks: checksFor({ input: { callPath: nodePath, enclosing, kind, wrapperHasTimeout } }),
+    notes: notesFor({ enclosing }),
   };
 };
 
@@ -252,6 +253,7 @@ export const toRelativeFile = ({ file, root }: { file: string; root: string }): 
  * @param params.root - absolute path the inventory is relative to
  * @param params.wrapperFiles - absolute paths of every wrapper module
  * @param params.wrapperBase - wrapper folder relative to root, which wrapper names are relative to
+ * @param params.wrapperTimeouts - what each wrapper says about timeouts, by wrapper name; a wrapper not listed has none
  * @returns call sites in source order
  */
 export const findCallSites = ({
@@ -260,12 +262,14 @@ export const findCallSites = ({
   root,
   wrapperFiles,
   wrapperBase,
+  wrapperTimeouts = {},
 }: {
   code: string;
   file: string;
   root: string;
   wrapperFiles: ReadonlySet<string>;
   wrapperBase: string;
+  wrapperTimeouts?: Readonly<Record<string, WrapperTimeouts>>;
 }): CallSite[] => {
   const relativeFile = toRelativeFile({ file, root });
   /**
@@ -278,12 +282,7 @@ export const findCallSites = ({
     const wrapperFile = resolveWrapperFile({ fromFile: file, source, wrapperFiles });
     return wrapperFile ? wrapperNameOf({ file: toRelativeFile({ file: wrapperFile, root }), wrapperBase }) : null;
   };
-  const ast = parse(code, {
-    sourceType: "unambiguous",
-    plugins: PLUGINS_BY_EXTENSION[path.extname(file)] || DEFAULT_PLUGINS,
-    allowReturnOutsideFunction: true,
-    allowAwaitOutsideFunction: true,
-  });
+  const ast = parseSource({ code, file });
   const bindings = collectBindings({ ast, wrapperOf });
   // Babel's traversal is callback driven, so this local list is the one accumulator here.
   const sites: CallSite[] = [];
@@ -293,7 +292,7 @@ export const findCallSites = ({
    * @param nodePath - the call expression's path
    */
   const visit = (nodePath: NodePath<t.CallExpression | t.OptionalCallExpression>) => {
-    const site = siteOfCall({ nodePath, file: relativeFile, bindings, wrapperOf });
+    const site = siteOfCall({ nodePath, file: relativeFile, bindings, wrapperOf, wrapperTimeouts });
     if (site) sites.push(site);
   };
   traverse(ast, { CallExpression: visit, OptionalCallExpression: visit });

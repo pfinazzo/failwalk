@@ -66,8 +66,18 @@ describe("the tracer (criteria 4 and 5)", () => {
 
   test("writes one record per test file into the trace folder", () => {
     const files = fs.readdirSync(traced.traceDir).filter((name) => name.endsWith(".json")).sort();
-    expect(files).toHaveLength(4);
-    expect(files.map((name) => name.replace(/-[0-9a-f]{8}\.json$/, ""))).toEqual(["database.test.js", "invoices.test.js", "signups.test.js", "subscriptions.test.js"]);
+    expect(files).toHaveLength(9);
+    expect(files.map((name) => name.replace(/-[0-9a-f]{8}\.json$/, ""))).toEqual([
+      "database.test.js",
+      "invoices.test.js",
+      "noTimeout.test.js",
+      "retryWithoutBackoff.test.js",
+      "retryWithoutKey.test.js",
+      "signups.test.js",
+      "subscriptions.test.js",
+      "swallowedCatch.test.js",
+      "unawaitedCall.test.js",
+    ]);
   });
 
   test("records no injection when FAILWALK_SITE is not set", () => {
@@ -78,7 +88,7 @@ describe("the tracer (criteria 4 and 5)", () => {
     const dir = makeTempDir({ prefix: "failwalk-trace-print" });
     const printed = runCli({ args: ["trace", "--inventory", traced.inventory, "--trace-dir", traced.traceDir, "--out", path.join(dir, "t.json")], cwd: dir });
     expect(printed.status).toBe(0);
-    expect(printed.stdout).toContain("9 tests in 4 files reached 7 of 10 call sites. 3 UNREACHED, 4 UNINVENTORIED.");
+    expect(printed.stdout).toContain("14 tests in 9 files reached 12 of 15 call sites. 3 UNREACHED, 4 UNINVENTORIED.");
     expect(printed.stdout).toContain(`${RETRIEVE}   2 tests`);
     expect(printed.stdout).toContain(`    ${SEND_RECEIPT}`);
     expect(printed.stdout).toContain("database.get at __tests__/database.test.js:6");
@@ -104,7 +114,7 @@ describe("the setup file without an injection (criterion 7)", () => {
     expect(plain.results.success).toBe(true);
     expect(traced.results.success).toBe(true);
     expect(outcomes({ results: traced.results })).toEqual(outcomes({ results: plain.results }));
-    expect(traced.results.numPassedTests).toBe(9);
+    expect(traced.results.numPassedTests).toBe(14);
   });
 });
 
@@ -135,7 +145,7 @@ describe("stack matching", () => {
 
   test("matches a frame to the inventory by file and line, and falls back to UNINVENTORIED", () => {
     const index = indexSites({
-      sites: [{ id: UPDATE_IN_SYNC, file: "controllers/subscriptions.js", line: 14, wrapper: "database", method: "update", kind: "write" }],
+      sites: [{ id: UPDATE_IN_SYNC, file: "controllers/subscriptions.js", line: 14, wrapper: "database", method: "update", kind: "write", checks: [], notes: [] }],
     });
     const hit = reachFor({ frame: { file: "/app/controllers/subscriptions.js", line: 14, column: 1 }, root: "/app", wrapper: "database", method: "update", index });
     expect(hit).toMatchObject({ id: UPDATE_IN_SYNC, inventoried: true });
@@ -148,8 +158,8 @@ describe("stack matching", () => {
   test("on a line with two sites, the one with the same wrapper and method wins", () => {
     const index = indexSites({
       sites: [
-        { id: "a.get@f.js:1", file: "f.js", line: 1, wrapper: "a", method: "get", kind: "read" },
-        { id: "b.put@f.js:1", file: "f.js", line: 1, wrapper: "b", method: "put", kind: "write" },
+        { id: "a.get@f.js:1", file: "f.js", line: 1, wrapper: "a", method: "get", kind: "read", checks: [], notes: [] },
+        { id: "b.put@f.js:1", file: "f.js", line: 1, wrapper: "b", method: "put", kind: "write", checks: [], notes: [] },
       ],
     });
     expect(reachFor({ frame: { file: "/r/f.js", line: 1, column: 1 }, root: "/r", wrapper: "b", method: "put", index }).id).toBe("b.put@f.js:1");
