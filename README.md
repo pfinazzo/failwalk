@@ -17,6 +17,7 @@ This is v1, steps 1 to 4 of the build order in [SPEC.md](SPEC.md): the inventory
 | The mode table | Six failure modes: `timeout`, `dropped`, `500`, `429`, `malformed`, `partial`. |
 | `failwalk plan` | Builds one cell per (call site, mode) from the inventory and the trace, with the tests to run for each. |
 | `failwalk run` | Inventory, traced baseline, plan, then one runner process per cell through a bounded pool, a verdict per cell, `failwalk.json` and the terminal grid. |
+| `failwalk ui` | Draws the grid as a 3D map in one self-contained HTML page and opens it. Red, amber and grey cells are the failure paths nobody has walked. |
 | `examples/sample-api` | A small Express app with three wrapper modules and its own Jest suite. The target for the output below. |
 
 Failwalk runs inside your test suite. It never touches a deployed environment.
@@ -450,6 +451,42 @@ The source of truth for a run. It holds the inventory, the merged trace, the pla
 
 `failwalk-inventory.json`, `failwalk-trace.json` and `failwalk-plan.json` are written beside it, and every runner process's JSON results and trace records stay under `.failwalk/`, one folder per cell, for reading after the run.
 
+## The map
+
+`failwalk ui` draws the grid as a picture and opens it in the browser.
+
+```bash
+node dist/cli.js ui
+```
+
+It reads `failwalk-inventory.json`, `failwalk-trace.json` and `failwalk.json` from the current folder, writes `failwalk-ui.html` beside them, and opens it. `--inventory`, `--trace`, `--report` and `--out` name other files; `--no-open` only writes the page. The data sits inside the page, so the one file can be sent to anyone. Three.js comes from a CDN at one pinned version, so the page needs a connection the first time it opens.
+
+![The map, on the walkthrough step for one uncaught cell: the call site's row is lit, and the panel lists the tests that reach it and the verdict under each failure mode.](docs/failwalk-ui.jpg)
+
+What the picture shows, for someone who has never seen the repo:
+
+- Each wrapper module is a group, with its name above it.
+- Each call into that wrapper is a node, placed under the file it is in.
+- Each test that reaches a call site is a beam from the test, floating behind the board, to that node.
+- Each failure mode is a column, so a call site is a row of cells.
+
+What the colours mean:
+
+- **Green, coped.** A test reached the call with the failure injected and the code coped: the tests passed, or a test asserted on the failure path. These are `PASS` and `FAIL` cells.
+- **Red, uncaught.** The failure was injected and nothing caught it: an unhandled error, a dead runner, or a test that waited until its own timeout. These are `CRASH` and `HANG` cells.
+- **Amber, risk.** The tests passed, but a static check found a pattern that passing hides. These are `RISK` cells.
+- **Grey, nobody walked it.** No test reaches the call site, so no failure was ever injected there. These are `UNREACHED` cells.
+
+Red, amber and grey are the point. They are the failure paths nobody has walked, and each one names the file and line.
+
+The page opens with a question: walk through everything, or explore on your own. The walkthrough shows the big picture, then each wrapper, then every uncovered cell, one at a time, with Back and Next, the arrow keys, a chapter menu and a progress bar. Clicking anything mid-walkthrough pauses it and offers the way back to the same step. Explore shows the whole board; drag to turn it, right-drag to pan, scroll to zoom. Clicking a call site opens a panel with its file and line, the wrapper method, the tests that reach it, and the verdict and note under each failure mode. Clicking a test lists the call sites it reaches. Clicking a wrapper lists its call sites, worst first. The index on the left searches all of them.
+
+![The map in Explore: three wrapper groups, their call sites by file, the beams from the tests, and one row of coloured cells per call site.](docs/failwalk-ui-explore.jpg)
+
+Before a run, the page still works. With an inventory but no trace, every cell is grey and the page says what to run next: the suite with the setup file loaded, then `failwalk trace`, then `failwalk run`. With a trace but no run, the beams are drawn and the cells stay grey until `failwalk run` fills them.
+
+The look and the walkthrough follow the system map pages built with the same family of tools, so the two read as one. [docs/decisions.md](docs/decisions.md) says why the map is one file and why rows are call sites.
+
 ## Using it on your own project
 
 1. Build failwalk: `npm install && npm run build`.
@@ -479,4 +516,4 @@ npm test
 
 That builds, runs 84 tests against `examples/sample-api` and a small ES-module fixture, including one full `failwalk run`, then runs the sample app's own 9 tests.
 
-This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4.
+This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-ui` for the map.
