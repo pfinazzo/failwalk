@@ -77,10 +77,10 @@ function payOff({ siteId, cellId, from = null }) {
   cell.scale = REDUCED ? 1.15 : 1.9; cell.targetScale = 1.15;
   if (from) cell.flip = { from: new THREE.Color(from), to: new THREE.Color(STATE_COLORS.coped), t: REDUCED ? 1 : 0 };
 }
-/** Stops the particle and resets the grown cell when the tour moves on or stops. */
+/** Stops the particle, resets the grown cell and finishes any colour fade when the tour moves on or stops. */
 function endPayOff() {
   beamRun = null; if (particle) particle.visible = false;
-  Object.values(nodes).forEach((n) => { if (n.targetScale === 1.15) n.targetScale = 1; });
+  Object.values(nodes).forEach((n) => { if (n.targetScale === 1.15) n.targetScale = 1; if (n.flip) n.flip.t = 1; });
 }
 /** The running count beside the chapter menu: which gap this is, and how many closed since the last run. */
 const tourCountText = (s) => [s.gapIndex ? `Gap ${s.gapIndex} of ${s.gapTotal}` : '', SINCE.fixed.length ? `<b>${plural(SINCE.fixed.length, 'gap')} closed</b> since the last run` : ''].filter(Boolean).join(' · ');

@@ -518,6 +518,6 @@ If a test mocks the whole wrapper with `jest.mock`, the mock replaces the tracer
 npm test
 ```
 
-That builds, runs 84 tests against `examples/sample-api` and a small ES-module fixture, including one full `failwalk run`, then runs the sample app's own 9 tests.
+That builds, runs 98 tests against `examples/sample-api` and a small ES-module fixture, including one full `failwalk run` and the shaping of the map, then runs the sample app's own 9 tests.
 
 This repo uses claimcheck, a verification ledger for AI-written diffs. Each step has its own frozen acceptance criteria and claims under `.claimcheck/tasks/`: `v1-inventory-tracer` for steps 1 to 3, `v1-plan-pool` for step 4, `v1-ui` for the map.

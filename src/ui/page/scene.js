@@ -134,6 +134,8 @@ const sideWidths = () => ({
   footer: $('#tour').classList.contains('on') ? $('#tour').offsetHeight + 34 : 70,
 });
 function frame(ids, extra = 1.2) {
+  /* Without WebGL there is no camera: the index and the panel still work, the board just does not move. */
+  if (!camera) return;
   const pts = ids.map((id) => POS[id]).filter(Boolean);
   if (!pts.length) return;
   const box = new THREE.Box3().setFromPoints(pts); const center = box.getCenter(new THREE.Vector3());

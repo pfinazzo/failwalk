@@ -88,7 +88,6 @@ if (gl) {
   initScene(); frame(ALL_IDS, 1.1); tick();
 } else {
   $('#nogl').style.display = 'grid';
-  window.frame = () => {};
 }
 /* For a headless check or a script: the page's data and the walkthrough, read-only. */
 window.__failwalk = { scene: SCENE, tour: TOUR, go: showTourStep, start: startTour, since: SINCE, reduced: REDUCED };
