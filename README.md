@@ -6,7 +6,7 @@ Failwalk tells you which of your vendor and database calls survive a failure, an
 
 ## Install
 
-Node 20 or newer. The repo is private, so your machine needs GitHub access to it.
+Node 20 or newer.
 
 Run it without installing. Wherever this page says `failwalk`, type this instead:
 
