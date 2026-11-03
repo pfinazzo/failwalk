@@ -176,15 +176,24 @@ const ranNote = ({ cell }: { cell: ReportCell }): string => {
   const evidence = cell.evidence;
   const failure = evidence?.tests.find(({ outcome }) => outcome !== "passed");
   const firstLine = (failure?.message || evidence?.runnerErrors[0] || "").split("\n")[0].slice(0, NOTE_CHARS);
-  const fired = evidence ? `fired ${evidence.fired} time${evidence.fired === 1 ? "" : "s"}` : "";
+  const fired = evidence ? `fired ${plural({ count: evidence.fired, word: "time" })}` : "";
   const checks = cell.verdict === "RISK" && cell.checks?.length ? `checks: ${cell.checks.join(", ")}` : "";
   return [cell.verdict, fired, checks, firstLine].filter((part) => part !== "").join("; ");
 };
 
+/**
+ * Counts a word: `1 test`, `2 tests`.
+ *
+ * @param params.count - how many
+ * @param params.word - the singular
+ * @returns the count and the word
+ */
+const plural = ({ count, word }: { count: number; word: string }): string => `${count} ${word}${count === 1 ? "" : "s"}`;
+
 /** The note for a grey cell, by how far the files got and whether a test reaches the site. */
 const GREY_NOTES: Record<SceneStatus, (params: { reached: number }) => string> = {
   "inventory-only": () => "Grey: no trace yet, so nothing is known about this cell.",
-  traced: ({ reached }) => (reached ? `Grey: ${reached} test${reached === 1 ? "" : "s"} reach this site, but no run has filled the cell yet.` : "Grey: no test reaches this call site."),
+  traced: ({ reached }) => (reached ? `Grey: ${plural({ count: reached, word: "test" })} reach this site, but no run has filled the cell yet.` : "Grey: no test reaches this call site."),
   run: () => "Grey: no test reaches this call site, so no failure was ever injected here.",
 };
 
