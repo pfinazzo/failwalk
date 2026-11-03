@@ -1,0 +1,4 @@
+{
+  "wrappers": "config/**/*.{js,ts}",
+  "jestConfig": "jest.failwalk.config.js"
+}

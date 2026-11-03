@@ -21,6 +21,8 @@ export type RunOptions = {
   config?: string;
   /** Where failwalk-inventory.json, failwalk-trace.json, failwalk-plan.json and failwalk.json go, with the .failwalk work folder beside them. */
   outDir: string;
+  /** Where the baseline and cell folders go. Defaults to .failwalk under outDir. */
+  workDir?: string;
   concurrency: number;
   minCoverage: number;
   testTimeoutMs: number;
@@ -89,7 +91,7 @@ const toCellResult = ({ cell, evidence, checks }: { cell: PlanCell; evidence: Ce
  * @param params - see RunOptions
  * @returns the report and the exit code
  */
-export const runWalk = async ({ root, wrappers, ignore, config, outDir, concurrency, minCoverage, testTimeoutMs, modes = MODE_NAMES, log }: RunOptions): Promise<{ report: RunReport; exitCode: number }> => {
+export const runWalk = async ({ root, wrappers, ignore, config, outDir, workDir, concurrency, minCoverage, testTimeoutMs, modes = MODE_NAMES, log }: RunOptions): Promise<{ report: RunReport; exitCode: number }> => {
   const absoluteRoot = path.resolve(root);
   const absoluteOut = path.resolve(outDir);
   fs.mkdirSync(absoluteOut, { recursive: true });
@@ -99,7 +101,7 @@ export const runWalk = async ({ root, wrappers, ignore, config, outDir, concurre
     config: resolveConfig({ root: absoluteRoot, config }),
     jestBin: resolveJestBin({ root: absoluteRoot }),
     inventoryFile,
-    workDir: path.join(absoluteOut, ".failwalk"),
+    workDir: path.resolve(workDir ?? path.join(absoluteOut, ".failwalk")),
     setupFile: SETUP_FILE,
     testTimeoutMs,
     env: process.env,

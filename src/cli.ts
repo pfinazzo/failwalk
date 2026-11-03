@@ -2,9 +2,11 @@
 import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
+import { initProject } from "./init/initProject";
 import { DEFAULT_IGNORE, formatInventorySummary, scanInventory } from "./inventory/scan";
 import { buildPlan, formatPlanSummary } from "./plan/buildPlan";
 import { formatRun, runWalk } from "./run/runCommand";
+import { runSimple } from "./run/simpleRun";
 import { loadInventory } from "./tracer/loadInventory";
 import { formatTraceSummary, mergeTraces, type TraceSummary } from "./tracer/mergeTraces";
 import { MODE_NAMES, type ModeName } from "./tracer/modes";
@@ -12,6 +14,7 @@ import { inventoryPath, traceDirPath } from "./tracer/paths";
 import { readTraceRecords } from "./tracer/traceFile";
 import { loadScene, openInBrowser } from "./ui/load";
 import { renderPage } from "./ui/render";
+import { readVersion } from "./version";
 
 /** Options of `failwalk inventory`, as commander parses them. */
 type InventoryOptions = { root: string; wrappers: string; out: string; ignore: string[] };
@@ -37,6 +40,12 @@ type RunCliOptions = {
 
 /** Options of `failwalk ui`, as commander parses them. `open` is false after --no-open. */
 type UiOptions = { inventory: string; trace: string; report: string; out: string; open: boolean };
+
+/** Options of `failwalk init`, as commander parses them. */
+type InitCliOptions = { root: string; wrappers?: string; force: boolean };
+
+/** Options of the bare `failwalk` command, as commander parses them. `open` is false after --no-open. */
+type SimpleCliOptions = { root: string; wrappers?: string; concurrency: string; minCoverage: string; testTimeoutMs: string; open: boolean };
 
 /** The default number of runner processes in flight at once. */
 const DEFAULT_CONCURRENCY = 4;
@@ -184,9 +193,62 @@ const printSetupPath = (): void => {
   process.stdout.write(`${path.join(__dirname, "tracer", "setup.js")}\n`);
 };
 
+/**
+ * Runs `failwalk init`: writes failwalk.config.json and jest.failwalk.config.js in the root, adds the output files to .gitignore, and prints what it did.
+ *
+ * @param params.root - the project folder
+ * @param params.wrappers - the wrappers glob, or undefined to pick a folder from the lookup list
+ * @param params.force - replace the two files when they exist
+ */
+const runInit = ({ root, wrappers, force }: InitCliOptions): void => {
+  const { lines } = initProject({ root, wrappers, force });
+  process.stdout.write(`${lines.join("\n")}\n`);
+};
+
+/**
+ * Runs the bare `failwalk` command: the whole walk from failwalk.config.json, the map page, and the headline as the last line of stdout.
+ * Exits 1 when the covered fraction is below --min-coverage.
+ *
+ * @param params - the command's options, see SimpleCliOptions
+ */
+const runBare = async ({ root, wrappers, concurrency, minCoverage, testTimeoutMs, open }: SimpleCliOptions): Promise<void> => {
+  const { report, exitCode, pageFile } = await runSimple({
+    root,
+    wrappers,
+    concurrency: parseNumber({ name: "--concurrency", value: concurrency }),
+    minCoverage: parseNumber({ name: "--min-coverage", value: minCoverage }),
+    testTimeoutMs: parseNumber({ name: "--test-timeout-ms", value: testTimeoutMs }),
+    open,
+    log: ({ line }) => process.stderr.write(`${line}\n`),
+  });
+  process.stderr.write(`map: ${pageFile}\n`);
+  process.stdout.write(`${report.headline}\n`);
+  process.exitCode = exitCode;
+};
+
 const program = new Command();
 
-program.name("failwalk").description("Failure-mode coverage for dependency calls.").version("0.1.0");
+// The bare command and `init` both take --root and --wrappers. Positional options keep a subcommand's own options for it.
+program
+  .name("failwalk")
+  .description("Failure-mode coverage for dependency calls. With no subcommand: run the whole walk from failwalk.config.json and open the map.")
+  .version(readVersion())
+  .enablePositionalOptions()
+  .option("--root <path>", "project folder, which holds failwalk.config.json", ".")
+  .option("--wrappers <glob>", "glob for wrapper modules, instead of the one in failwalk.config.json")
+  .option("--concurrency <n>", "how many runner processes may run at once", String(DEFAULT_CONCURRENCY))
+  .option("--min-coverage <fraction>", "exit 1 when fewer than this fraction of cells are PASS or FAIL", "0")
+  .option("--test-timeout-ms <ms>", "per-test timeout given to the runner", String(DEFAULT_TEST_TIMEOUT_MS))
+  .option("--no-open", "write the map page without opening it")
+  .action(runBare);
+
+program
+  .command("init")
+  .description("Write failwalk.config.json and jest.failwalk.config.js for this project, and add failwalk's output files to .gitignore.")
+  .option("--root <path>", "project folder to set up", ".")
+  .option("--wrappers <glob>", "glob for wrapper modules, relative to root (default: the first common wrapper folder that exists)")
+  .option("--force", "replace failwalk.config.json and jest.failwalk.config.js when they exist", false)
+  .action(runInit);
 
 program
   .command("inventory")
